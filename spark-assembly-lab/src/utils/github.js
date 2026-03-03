@@ -159,9 +159,62 @@ const fetchJson = async (url, options = {}) => {
   return { response, body };
 };
 
+/**
+ * Build GitHub API headers with optional authentication
+ */
+const buildGitHubHeaders = (options = {}) => {
+  const { noAuth = false } = options;
+
+  const headers = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'spark-assembly-lab',
+  };
+
+  const token = noAuth ? null : getStoredToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  return headers;
+};
+
+const fetchGitHub = async (url, init = {}) => {
+  const first = await fetch(url, {
+    ...init,
+    headers: buildGitHubHeaders(),
+  });
+
+  if (first.status !== 401) return first;
+
+  // Stored token is invalid/revoked. Clear auth and retry without Authorization.
+  try {
+    clearUserAuth();
+  } catch {
+    // ignore
+  }
+
+  return await fetch(url, {
+    ...init,
+    headers: buildGitHubHeaders({ noAuth: true }),
+  });
+};
+
+const fetchGitHubJson = async (url) => {
+  const first = await fetchJson(url, { headers: buildGitHubHeaders() });
+  if (first.response.status !== 401) return first;
+
+  try {
+    clearUserAuth();
+  } catch {
+    // ignore
+  }
+
+  return await fetchJson(url, { headers: buildGitHubHeaders({ noAuth: true }) });
+};
+
 const checkRepoAccessible = async (owner, repo) => {
   const url = `https://api.github.com/repos/${owner}/${repo}`;
-  const { response } = await fetchJson(url, { headers: buildGitHubHeaders() });
+  const { response } = await fetchGitHubJson(url);
   if (response.status === 403) {
     throw new Error('GitHub API rate limit exceeded. Please add a GitHub token or try again later.');
   }
@@ -171,29 +224,12 @@ const checkRepoAccessible = async (owner, repo) => {
 const checkBranchExists = async (owner, repo, branch) => {
   if (!branch) return true;
   const url = `https://api.github.com/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`;
-  const { response } = await fetchJson(url, { headers: buildGitHubHeaders() });
+  const { response } = await fetchGitHubJson(url);
   if (response.status === 403) {
     throw new Error('GitHub API rate limit exceeded. Please add a GitHub token or try again later.');
   }
   if (response.status === 404) return false;
   return response.ok;
-};
-
-/**
- * Build GitHub API headers with optional authentication
- */
-const buildGitHubHeaders = () => {
-  const headers = {
-    'Accept': 'application/vnd.github+json',
-    'User-Agent': 'spark-assembly-lab',
-  };
-
-  const token = getStoredToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  return headers;
 };
 
 /**
@@ -203,9 +239,7 @@ const searchSparkFiles = async (owner, repo) => {
   const query = `filename:.spark.md repo:${owner}/${repo}`;
   const url = `https://api.github.com/search/code?q=${encodeURIComponent(query)}`;
 
-  const response = await fetch(url, {
-    headers: buildGitHubHeaders(),
-  });
+  const response = await fetchGitHub(url);
 
   if (!response.ok) {
     if (response.status === 403) {
@@ -224,9 +258,7 @@ const searchSparkFiles = async (owner, repo) => {
 const listDirectory = async (owner, repo, path = 'sparks', branch = 'main') => {
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
 
-  const response = await fetch(url, {
-    headers: buildGitHubHeaders(),
-  });
+  const response = await fetchGitHub(url);
 
   if (!response.ok) {
     if (response.status === 404) {
@@ -273,7 +305,7 @@ const fetchFileContent = async (owner, repo, path, branch = 'main') => {
   const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(path).replace(/%2F/g, '/')}` +
     `?ref=${encodeURIComponent(branch)}`;
 
-  const { response: apiResponse, body } = await fetchJson(apiUrl, { headers: buildGitHubHeaders() });
+  const { response: apiResponse, body } = await fetchGitHubJson(apiUrl);
   if (!apiResponse.ok) {
     throw new Error(`Failed to fetch ${path}: ${response.status}`);
   }
@@ -406,9 +438,7 @@ export const fetchBranches = async (repoInput) => {
     const { owner, repo } = parseRepoUrl(repoInput);
     const url = `https://api.github.com/repos/${owner}/${repo}/branches`;
 
-    const response = await fetch(url, {
-      headers: buildGitHubHeaders(),
-    });
+    const response = await fetchGitHub(url);
 
     if (!response.ok) {
       if (response.status === 404) {
