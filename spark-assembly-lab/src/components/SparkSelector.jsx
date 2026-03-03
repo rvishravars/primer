@@ -16,12 +16,25 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
   const [missionSummary, setMissionSummary] = useState(null);
   const [missionLoading, setMissionLoading] = useState(false);
   const [missionError, setMissionError] = useState(null);
+  const [missionRefreshToken, setMissionRefreshToken] = useState(0);
   const [prInfo, setPrInfo] = useState({ count: null, urls: [] });
   const [refreshToken, setRefreshToken] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [isScribeSummaryCollapsed, setIsScribeSummaryCollapsed] = useState(true);
   const [isSparksListCollapsed, setIsSparksListCollapsed] = useState(true);
   const hasRegisteredRefresh = useRef(false);
+  const onPermissionChangeRef = useRef(onPermissionChange);
+  const missionContentRef = useRef(null);
+  const missionFallbackRef = useRef(null);
+
+  useEffect(() => {
+    onPermissionChangeRef.current = onPermissionChange;
+  }, [onPermissionChange]);
+
+  useEffect(() => {
+    missionContentRef.current = selectedSpark?.rawContent || null;
+    missionFallbackRef.current = selectedSpark || null;
+  }, [selectedSpark]);
 
   // Expose refresh function to parent
   useEffect(() => {
@@ -176,7 +189,10 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
   }, [sparks, selectedSpark, onSparkSelect, currentSparkData]);
 
   useEffect(() => {
-    if (!selectedSpark?.rawContent) {
+    const missionKey = selectedSpark?.sourcePath || selectedSpark?.sourceFile || selectedSpark?.id || null;
+    const content = missionContentRef.current;
+
+    if (!missionKey || !content) {
       setMissionSummary(null);
       setMissionError(null);
       setMissionLoading(false);
@@ -193,7 +209,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
         const response = await fetch('/api/mission', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: selectedSpark.rawContent }),
+          body: JSON.stringify({ content }),
           signal: controller.signal,
         });
 
@@ -214,7 +230,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
           return;
         }
         setMissionError(err.message || 'Failed to run mission evaluation');
-        setMissionSummary(buildMissionSummary(selectedSpark));
+        setMissionSummary(buildMissionSummary(missionFallbackRef.current));
       } finally {
         setMissionLoading(false);
       }
@@ -222,10 +238,11 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
 
     loadMission();
     return () => controller.abort();
-  }, [selectedSpark]);
+  }, [selectedSpark?.sourcePath, selectedSpark?.sourceFile, selectedSpark?.id, missionRefreshToken]);
 
   useEffect(() => {
-    if (!selectedSpark?.sourcePath || !repoUrl) {
+    const sparkPath = selectedSpark?.sourcePath;
+    if (!sparkPath || !repoUrl) {
       setPrInfo({ count: null, urls: [] });
       return;
     }
@@ -234,7 +251,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
     const loadPrs = async () => {
       try {
         const token = getStoredToken();
-        const response = await fetch(`/api/prs?repo=${encodeURIComponent(repoUrl)}&path=${encodeURIComponent(selectedSpark.sourcePath)}`, {
+        const response = await fetch(`/api/prs?repo=${encodeURIComponent(repoUrl)}&path=${encodeURIComponent(sparkPath)}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           signal: controller.signal,
         });
@@ -245,9 +262,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
         setPrInfo({ count: data.count ?? 0, urls: data.urls || [] });
 
         // Notify parent about push permissions
-        if (onPermissionChange) {
-          onPermissionChange(data.can_push ?? false);
-        }
+        onPermissionChangeRef.current?.(data.can_push ?? false);
       } catch (err) {
         if (err.name === 'AbortError') {
           return;
@@ -258,8 +273,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
 
     loadPrs();
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSpark, repoUrl, refreshToken]);
+  }, [selectedSpark?.sourcePath, repoUrl, refreshToken]);
 
   return (
     <div className="flex flex-col h-full">
@@ -334,19 +348,32 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
           <div className="flex-1 overflow-y-auto p-4">
             {missionSummary && (
               <div className="mb-4 rounded-lg border theme-border theme-card-soft">
-                <button
+                <div
                   onClick={() => setIsScribeSummaryCollapsed(!isScribeSummaryCollapsed)}
-                  className="w-full flex items-center justify-between p-3 hover:bg-gray-700/30 transition-colors"
+                  className="w-full flex items-center justify-between p-3 hover:bg-gray-700/30 transition-colors cursor-pointer"
                 >
                   <p className="text-xs uppercase tracking-wider theme-muted font-semibold">
                     Scribe Summary
                   </p>
-                  {isScribeSummaryCollapsed ? (
-                    <ChevronDown className="h-4 w-4 theme-muted" />
-                  ) : (
-                    <ChevronUp className="h-4 w-4 theme-muted" />
-                  )}
-                </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMissionRefreshToken((value) => value + 1);
+                      }}
+                      disabled={missionLoading}
+                      className="theme-muted-hover transition-colors disabled:opacity-50"
+                      title="Re-run mission"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${missionLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                    {isScribeSummaryCollapsed ? (
+                      <ChevronDown className="h-4 w-4 theme-muted" />
+                    ) : (
+                      <ChevronUp className="h-4 w-4 theme-muted" />
+                    )}
+                  </div>
+                </div>
 
                 {!isScribeSummaryCollapsed && (
                   <div className="px-3 pb-3">

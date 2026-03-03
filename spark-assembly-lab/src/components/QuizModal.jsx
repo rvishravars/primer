@@ -48,7 +48,7 @@ const clearApiKey = (provider) => {
   }
 };
 
-export default function QuizModal({ sparkData, onClose, improveMode = 'quiz' }) {
+export default function QuizModal({ sparkData, onClose }) {
   const [selectedProvider, setSelectedProvider] = useState('gemini');
   const [apiKey, setApiKey] = useState('');
   const [saveKeyToStorage, setSaveKeyToStorage] = useState(false);
@@ -201,35 +201,6 @@ Return a thorough, structured feedback report with:
 - One insightful clarifying question to ask the team
 
 Ensure the report is complete and does not cut off. Write in plain text.`;
-  };
-
-  const buildCritiquePrompt = () => {
-    const sparkContent = generateSparkMarkdown(sparkData);
-    const focusMap = {
-      '1': 'Spark Narrative',
-      '2': 'Hypothesis Formalization',
-      '3': 'Simulation / Modeling Plan',
-      '4': 'Evaluation Strategy'
-    };
-    const focusTitle = focusMap[quizMode] || 'GENERAL';
-
-    return `You are a Spark mentor. Provide a detailed, in-depth critique and comprehensive improvement suggestions for the following spark.
-
-Focus area: ${focusTitle}.
-The goal is to strengthen the spark's narrative, design, or logic.
-
-Spark Name: ${sparkData.name}
-
-Spark Content:
-${sparkContent.slice(0, 3000)}
-
-Return a thorough, structured feedback report with:
-- Strengths you observe in detail
-- Critical gaps or risks identified
-- Direct, actionable improvement suggestions for the content
-- One "stress-test" question to push the idea further
-
-Ensure the response is fully developed and complete. Write in plain text.`;
   };
 
   const generateGeminiQuiz = async () => {
@@ -437,51 +408,6 @@ IMPORTANT: Return ONLY a valid JSON array. Do not include any prose, markdown, o
         saveApiKey(selectedProvider, apiKey);
       }
 
-      if (improveMode === 'critique') {
-        setShowResults(true);
-        setSummaryLoading(true);
-        setSummary('');
-
-        const prompt = buildCritiquePrompt();
-        let report = '';
-
-        if (selectedProvider === 'openai') {
-          const response = await fetch('/api/quiz/summary', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              provider: 'openai',
-              apiKey,
-              model: openaiModel,
-              prompt,
-            }),
-          });
-          const data = await response.json();
-          if (!response.ok) throw new Error(data?.error || 'OpenAI request failed');
-          report = data.summary || '';
-        } else {
-          // Gemini
-          const modelPath = selectedModel.startsWith('models/') ? selectedModel : `models/${selectedModel}`;
-          const endpoint = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${encodeURIComponent(apiKey)}`;
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ role: 'user', parts: [{ text: prompt }] }],
-              generationConfig: { temperature: 0.4, maxOutputTokens: 4000, responseMimeType: 'text/plain' },
-            }),
-          });
-          const responseBody = await response.json();
-          if (!response.ok) throw new Error(responseBody?.error?.message || 'Gemini API request failed');
-          report = responseBody?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        }
-
-        setSummary(report);
-        setSummaryLoading(false);
-        return;
-      }
-
-      // Default Quiz Mode
       const quiz = selectedProvider === 'openai'
         ? await generateOpenAIQuiz()
         : await generateGeminiQuiz();
@@ -692,9 +618,9 @@ IMPORTANT: Return ONLY a valid JSON array. Do not include any prose, markdown, o
           <div className="flex items-center space-x-3">
             <Brain className="h-8 w-8" />
             <div>
-              <h2 className="text-2xl font-bold">{improveMode === 'quiz' ? 'Improve Spark' : 'Critique Spark'}</h2>
+              <h2 className="text-2xl font-bold">Improve Spark</h2>
               <p className="text-sm opacity-90">
-                {improveMode === 'quiz' ? 'Get AI feedback to strengthen your spark' : 'Get direct AI suggestions to strengthen your spark'}
+                Get AI feedback to strengthen your spark
               </p>
             </div>
           </div>
@@ -864,7 +790,7 @@ IMPORTANT: Return ONLY a valid JSON array. Do not include any prose, markdown, o
             disabled={!apiKey || loading}
             className="w-full px-6 py-3 bg-design-600 hover:bg-design-700 rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? (improveMode === 'quiz' ? 'Generating Quiz...' : 'Generating Critique...') : (improveMode === 'quiz' ? 'Start Quiz' : 'Get Suggestions')}
+            {loading ? 'Generating Quiz...' : 'Start Quiz'}
           </button>
         </div>
       </div>

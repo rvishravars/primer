@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Download, Copy, Eye, Brain, AlertCircle, GitPullRequest, RotateCcw, Trash2, MoreVertical, Plus } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, MoreVertical, Plus } from 'lucide-react';
 import MarkdownPreview from './MarkdownPreview';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -8,7 +8,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import QuizModal from './QuizModal';
 import PRTracker from './PRTracker';
-import { generateSparkMarkdown, validateSparkData } from '../utils/sparkParser';
+import { generateSparkMarkdown, parseSparkFile, validateSparkData } from '../utils/sparkParser';
 import { useToast } from '../utils/ToastContext';
 import { getStoredToken, getStoredUserInfo, parseRepoUrl } from '../utils/github';
 import ContributorsList from './ContributorsList';
@@ -24,10 +24,26 @@ const ENHANCED_SECTIONS_CONFIG = {
   8: { title: '8. Next Actions', description: 'Concrete steps forward', color: 'spark' }
 };
 
+const buildMarkdownDraftStorageKey = (repoUrl, draftId) => {
+  let repoKey = 'local';
+  try {
+    if (repoUrl) {
+      const { owner, repo } = parseRepoUrl(repoUrl);
+      repoKey = `${owner}/${repo}`;
+    }
+  } catch (e) {
+    repoKey = repoUrl || 'local';
+  }
+
+  const safeDraftId = draftId || 'untitled';
+  return `spark_lab_markdown_draft:${repoKey}:${safeDraftId}`;
+};
+
 export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, originalSparkData, onResetSpark, isReadOnly, onPRCreated, canPush = true, onNewSpark }) {
+  const [viewMode, setViewMode] = useState('components'); // 'components' | 'markdown'
   const [showPreview, setShowPreview] = useState(false);
+  const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
-  const [improveMode, setImproveMode] = useState('quiz');
   const [showPRTracker, setShowPRTracker] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
@@ -39,6 +55,10 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   const [showDropdown, setShowDropdown] = useState(false);
   const [contributors, setContributors] = useState([]);
   const [contributorsLoading, setContributorsLoading] = useState(false);
+  const [markdownDraft, setMarkdownDraft] = useState('');
+  const sparkDataRef = useRef(sparkData);
+  const markdownDraftId = originalSparkData?.sourcePath || sparkData?.sourcePath || sparkData?.name || 'untitled';
+  const markdownDraftStorageKey = buildMarkdownDraftStorageKey(repoUrl, markdownDraftId);
   const toast = useToast();
   const user = getStoredUserInfo();
   const isOwner = user && (() => {
@@ -53,6 +73,66 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       user.login?.toLowerCase() === repoOwner.toLowerCase()
     );
   })();
+
+  useEffect(() => {
+    sparkDataRef.current = sparkData;
+  }, [sparkData]);
+
+  useEffect(() => {
+    if (viewMode !== 'markdown') return;
+
+    try {
+      const stored = localStorage.getItem(markdownDraftStorageKey);
+      if (stored !== null) {
+        setMarkdownDraft(stored);
+      } else {
+        setMarkdownDraft(generateSparkMarkdown(sparkDataRef.current));
+      }
+    } catch (e) {
+      setMarkdownDraft(generateSparkMarkdown(sparkDataRef.current));
+    }
+
+    setShowMarkdownPreview(false);
+  }, [viewMode, markdownDraftStorageKey]);
+
+  useEffect(() => {
+    if (viewMode !== 'markdown') return;
+
+    const timeoutId = window.setTimeout(() => {
+      try {
+        localStorage.setItem(markdownDraftStorageKey, markdownDraft);
+      } catch (e) {
+        // Best-effort persistence.
+      }
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [markdownDraft, viewMode, markdownDraftStorageKey]);
+
+  useEffect(() => {
+    if (viewMode !== 'markdown') return;
+    if (!markdownDraft) return;
+
+    const timeoutId = window.setTimeout(() => {
+      try {
+        const parsed = parseSparkFile(markdownDraft);
+        const current = sparkDataRef.current;
+        if (!current) return;
+
+        onSparkUpdate({
+          ...current,
+          name: parsed?.name || current.name,
+          markedForDeletion: typeof parsed?.markedForDeletion === 'boolean' ? parsed.markedForDeletion : current.markedForDeletion,
+          sections: parsed?.sections || current.sections,
+          proposals: parsed?.proposals || current.proposals,
+        });
+      } catch (e) {
+        // Best-effort parsing; keep draft editable even if parsing fails.
+      }
+    }, 500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [markdownDraft, onSparkUpdate, viewMode]);
 
   // Load contributors for the selected spark
   useEffect(() => {
@@ -373,6 +453,25 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
           </div>
 
           <div className="flex items-center gap-2">
+            {/* View Mode Selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs theme-subtle hidden sm:inline">View</span>
+              <select
+                value={viewMode}
+                onChange={(e) => {
+                  const nextMode = e.target.value;
+                  setViewMode(nextMode);
+                  setShowPreview(false);
+                  setShowPRTracker(false);
+                  if (nextMode === 'markdown') setShowMarkdownPreview(false);
+                }}
+                className="rounded-lg theme-button px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-colors"
+              >
+                <option value="components">Components</option>
+                <option value="markdown">Markdown</option>
+              </select>
+            </div>
+
             {/* Primary Toggle: Create New Spark */}
             <button
               onClick={onNewSpark}
@@ -386,13 +485,15 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
             </button>
 
             {/* Primary Toggle: Preview/Edit */}
-            <button
-              onClick={() => setShowPreview(!showPreview)}
-              className="flex items-center space-x-1 sm:space-x-2 rounded-lg theme-button px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap flex-shrink-0"
-            >
-              <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span>{showPreview ? 'Edit' : 'Preview'}</span>
-            </button>
+            {viewMode === 'components' && (
+              <button
+                onClick={() => setShowPreview(!showPreview)}
+                className="flex items-center space-x-1 sm:space-x-2 rounded-lg theme-button px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap flex-shrink-0"
+              >
+                <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span>{showPreview ? 'Edit' : 'Preview'}</span>
+              </button>
+            )}
 
             {/* Primary Action: Submit */}
             <button
@@ -423,21 +524,12 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                   />
                   <div className="absolute right-0 mt-2 w-48 rounded-xl theme-panel border theme-border shadow-2xl z-[60] py-2 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                     <button
-                      onClick={() => { setImproveMode('quiz'); setShowQuiz(true); setShowDropdown(false); }}
+                      onClick={() => { setShowQuiz(true); setShowDropdown(false); }}
                       disabled={!user}
                       className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-design-500/10 transition-colors disabled:opacity-50"
                     >
                       <Brain className="h-4 w-4 text-design-400" />
                       <span>Quiz</span>
-                    </button>
-
-                    <button
-                      onClick={() => { setImproveMode('critique'); setShowQuiz(true); setShowDropdown(false); }}
-                      disabled={!user}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-design-500/10 transition-colors disabled:opacity-50"
-                    >
-                      <AlertCircle className="h-4 w-4 text-design-400" />
-                      <span>Critique</span>
                     </button>
 
                     <button
@@ -511,7 +603,43 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
         </div>
       )}
 
-      {showPreview ? (
+      {viewMode === 'markdown' ? (
+        <div className="flex-1 overflow-y-auto">
+          <div className="h-full flex flex-col p-4 sm:p-6 gap-4 sm:gap-6">
+            <div className="flex-1 flex flex-col rounded-xl border-2 border-white/10 theme-panel-soft min-w-0">
+              <div className="px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl bg-white/5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-lg sm:text-xl font-bold theme-muted">Markdown</h2>
+                  <p className="text-xs sm:text-sm mt-1 theme-subtle">Edits are saved locally in this browser</p>
+                </div>
+                <button
+                  onClick={() => setShowMarkdownPreview(!showMarkdownPreview)}
+                  className="flex items-center space-x-2 rounded-lg theme-button px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap flex-shrink-0"
+                >
+                  <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span>{showMarkdownPreview ? 'Edit' : 'Preview'}</span>
+                </button>
+              </div>
+
+              <div className="flex-1 p-3 sm:p-4 overflow-hidden">
+                {showMarkdownPreview ? (
+                  <div className="h-full overflow-y-auto">
+                    <MarkdownPreview markdown={markdownDraft || ''} />
+                  </div>
+                ) : (
+                  <textarea
+                    value={markdownDraft}
+                    onChange={(e) => setMarkdownDraft(e.target.value)}
+                    readOnly={isReadOnly}
+                    className={`w-full h-full resize-none theme-input rounded border p-3 sm:p-4 text-xs sm:text-sm font-mono bg-black/10 overflow-y-auto ${isReadOnly ? 'cursor-not-allowed opacity-80' : ''}`}
+                    spellCheck={false}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : showPreview ? (
         <MarkdownPreview markdown={generateSparkMarkdown(sparkData)} />
       ) : showPRTracker ? (
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
@@ -645,7 +773,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
           </div>
 
           {/* Quiz Modal */}
-          {showQuiz && <QuizModal sparkData={sparkData} onClose={() => setShowQuiz(false)} improveMode={improveMode} />}
+          {showQuiz && <QuizModal sparkData={sparkData} onClose={() => setShowQuiz(false)} />}
 
           {/* Cool PR Confirmation Modal */}
           {showConfirmation && (
