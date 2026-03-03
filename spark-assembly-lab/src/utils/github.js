@@ -409,9 +409,31 @@ export const loadSparksFromGitHub = async (repoInput, branch = 'main', searchPat
     }
 
     if (combinedItems.length > 0 && files.length === 0) {
+      // Browser-side fetching can be blocked by extensions/privacy tools.
+      // Cloud Run includes a backend endpoint that fetches server-side, which is typically more reliable.
+      try {
+        const backendUrl = `/api/sparks?repo=${encodeURIComponent(repoInput)}&branch=${encodeURIComponent(branch)}&path=${encodeURIComponent(searchPath)}`;
+        const backendResponse = await fetch(backendUrl);
+        if (backendResponse.ok) {
+          const backendData = await backendResponse.json();
+          if (backendData?.files?.length) {
+            return {
+              success: true,
+              owner: backendData.owner || owner,
+              repo: backendData.repo || repo,
+              branch: backendData.branch || branch,
+              files: backendData.files,
+              source: backendData.source || 'backend',
+            };
+          }
+        }
+      } catch (backendErr) {
+        console.warn('Backend spark fetch failed:', backendErr);
+      }
+
       return {
         success: false,
-        error: `Found ${combinedItems.length} .spark.md file(s) but failed to fetch their contents. This can happen if raw.githubusercontent.com is blocked or if GitHub is rate-limiting requests. Try logging in with a GitHub token and refreshing.`,
+        error: `Found ${combinedItems.length} .spark.md file(s) but failed to fetch their contents. This is often caused by browser extensions blocking GitHub requests. Try disabling blockers for github.com/raw.githubusercontent.com or refreshing in incognito, or login with a GitHub token and refresh.`,
       };
     }
 
