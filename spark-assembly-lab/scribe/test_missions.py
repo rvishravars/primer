@@ -15,7 +15,7 @@ EXAMPLE_SPARK = """# 🧩 Spark: GitHub Reputation Decay Algorithm
 
 ## 🧠 Phase 1: The Spark (!HUNCH)
 
-*Status: [Active]* *Scout: @vishravars*
+*Status: [Active]*
 
 ### The Observation
 > Contributors on GitHub accumulate reputation but lose momentum when inactive. There's no mechanism to decay stale contributions or refresh reputation based on recent activity.

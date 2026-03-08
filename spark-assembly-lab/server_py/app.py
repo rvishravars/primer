@@ -197,6 +197,34 @@ def search_for_spark_files(owner: str, repo: str) -> List[Dict[str, Any]]:
     return search_data.get("items", [])
 
 
+def get_last_commit_author(owner: str, repo: str, path: str, branch: str, headers: Dict[str, str]) -> Optional[Dict[str, Optional[str]]]:
+    """Fetch the last commit for a given file and return author info.
+
+    Uses the GitHub commits API filtered by path and branch, limited to 1 result.
+    Returns a dict with keys 'login' and 'name' when available, otherwise None.
+    """
+    commits_url = (
+        f"https://api.github.com/repos/{owner}/{repo}/commits"
+        f"?path={urllib.parse.quote(path)}&sha={urllib.parse.quote(branch)}&per_page=1"
+    )
+    try:
+        commits = fetch_json(commits_url, headers)
+    except Exception as err:
+        print(f"Failed to fetch commits for {path}: {err}")
+        return None
+
+    if isinstance(commits, list) and commits:
+        commit = commits[0]
+        author_user = commit.get("author") or {}
+        commit_author = (commit.get("commit") or {}).get("author", {})
+        login = author_user.get("login")
+        name = commit_author.get("name")
+        if login or name:
+            return {"login": login, "name": name}
+
+    return None
+
+
 def fetch_sparks_from_github(owner: str, repo: str, branch: str = "main", search_path: str = "sparks") -> Dict[str, Any]:
     headers = build_github_headers()
     spark_items: List[Dict[str, Any]] = []
@@ -234,10 +262,12 @@ def fetch_sparks_from_github(owner: str, repo: str, branch: str = "main", search
             if not content_url:
                 content_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}"
             content = fetch_text(content_url, headers)
+            last_commit_author = get_last_commit_author(owner, repo, path, branch, headers)
             files.append({
                 "name": item.get("name") or path.split("/")[-1],
                 "path": path,
                 "content": content,
+                "lastCommit": last_commit_author,
             })
         except Exception as err:
             print(f"Failed to fetch {item.get('name') or item.get('path')}: {err}")

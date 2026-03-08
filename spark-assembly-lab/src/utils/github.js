@@ -334,6 +334,42 @@ const fetchFileContent = async (owner, repo, path, branch = 'main') => {
 };
 
 /**
+ * Fetch the last commit author for a specific file
+ */
+export const fetchLastCommitAuthor = async (owner, repo, filepath, branch = 'main') => {
+  try {
+    const url = `https://api.github.com/repos/${owner}/${repo}/commits?path=${encodeURIComponent(filepath)}&sha=${encodeURIComponent(branch)}&per_page=1`;
+
+    const response = await fetch(url, {
+      headers: buildGitHubHeaders(),
+    });
+
+    if (!response.ok) {
+      // Best-effort only; don't fail the whole flow.
+      console.warn('Failed to fetch last commit author:', response.status);
+      return null;
+    }
+
+    const commits = await response.json();
+    if (Array.isArray(commits) && commits.length > 0) {
+      const commit = commits[0];
+      const authorUser = commit.author || {};
+      const commitAuthor = (commit.commit || {}).author || {};
+      const login = authorUser.login || null;
+      const name = commitAuthor.name || null;
+      if (login || name) {
+        return { login, name };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.warn('Failed to fetch last commit author:', error);
+    return null;
+  }
+};
+
+/**
  * Load all sparks from a GitHub repository
  */
 export const loadSparksFromGitHub = async (repoInput, branch = 'main', searchPath = 'sparks') => {
@@ -391,16 +427,18 @@ export const loadSparksFromGitHub = async (repoInput, branch = 'main', searchPat
       };
     }
 
-    // Fetch content for each spark file
+    // Fetch content (and optionally last commit) for each spark file
     const files = [];
     for (const item of combinedItems) {
       try {
         const path = item.path || item.name;
         const content = await fetchFileContent(owner, repo, path, branch);
+        const lastCommit = await fetchLastCommitAuthor(owner, repo, path, branch);
         files.push({
           name: item.name || path.split('/').pop(),
           path: path,
           content: content,
+          lastCommit,
         });
       } catch (err) {
         console.warn(`Failed to fetch ${item.name || item.path}:`, err);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FileText, Zap, RefreshCw, Search, X, Globe, FolderGit2, ChevronDown, ChevronUp, GitPullRequest } from 'lucide-react';
 import { buildMissionSummary, parseSparkFile } from '../utils/sparkParser';
-import { getStoredToken, loadSparksFromGitHub } from '../utils/github';
+import { getStoredToken, loadSparksFromGitHub, parseRepoUrl } from '../utils/github';
 import RepoInput from './RepoInput';
 import GlobalSparkSearch from './GlobalSparkSearch';
 
@@ -52,13 +52,31 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
     return 'bg-red-600';
   };
 
-  const buildSparkEntry = useCallback((filename, content, sourcePath) => {
+  const buildSparkEntry = useCallback((filename, content, sourcePath, lastCommitAuthorLogin) => {
     console.log(`🛠️ Building spark entry for ${filename}, content length: ${content?.length || 0}`);
     const parsed = parseSparkFile(content);
     console.log(`✅ Parsed name for ${filename}:`, parsed.name);
     parsed.rawContent = content;
     parsed.sourceFile = filename;
     parsed.sourcePath = sourcePath || filename;
+
+    // Derive spark owner from Git metadata when not explicitly set
+    try {
+      if (!parsed.contributors) parsed.contributors = {};
+      // Prefer last commit author login when available from backend
+      if (!parsed.contributors.scout && lastCommitAuthorLogin) {
+        parsed.contributors.scout = lastCommitAuthorLogin;
+      } else if (!parsed.contributors.scout && repoUrl) {
+        // Fallback: use repo owner
+        const { owner } = parseRepoUrl(repoUrl);
+        if (owner) {
+          parsed.contributors.scout = owner;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to derive spark owner from repo URL:', e);
+    }
+
     return {
       id: filename.replace('.spark.md', ''),
       name: parsed.name,
@@ -66,7 +84,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
       stability: parsed.stability,
       data: parsed,
     };
-  }, []);
+  }, [repoUrl]);
 
   // Update spark in list when currentSparkData changes
   useEffect(() => {
@@ -160,7 +178,12 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
       // Check if we have files
       if (result.files && result.files.length > 0) {
         const parsedSparks = result.files.map((file) =>
-          buildSparkEntry(file.name || file.path || 'spark', file.content, file.path)
+          buildSparkEntry(
+            file.name || file.path || 'spark',
+            file.content,
+            file.path,
+            file.lastCommit?.login || null,
+          )
         );
 
         // Sort by name in reverse order (latest first)

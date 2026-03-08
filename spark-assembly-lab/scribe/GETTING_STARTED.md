@@ -162,7 +162,7 @@ Example minimal Spark:
 # 🧩 Example Spark
 
 ## 🧠 Phase 1: The Spark (!HUNCH)
-*Status: Claimed* *Scout: @yourname*
+*Status: Claimed*
 
 ### The Observation
 > We have no way to track Spark creation dates.

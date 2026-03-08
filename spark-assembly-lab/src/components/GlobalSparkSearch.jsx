@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Search, Globe, Star, ExternalLink, Loader, AlertCircle, X, Filter } from 'lucide-react';
-import { globalSearchSparkFiles, fetchSparkFilePreview } from '../utils/github';
+import { globalSearchSparkFiles, fetchSparkFilePreview, fetchLastCommitAuthor } from '../utils/github';
 import { parseSparkFile } from '../utils/sparkParser';
 
 export default function GlobalSparkSearch({ onSparkLoad, onRepoSelect }) {
@@ -61,7 +61,28 @@ export default function GlobalSparkSearch({ onSparkLoad, onRepoSelect }) {
         parsed.sourceFile = result.name;
         parsed.sourcePath = result.path;
         parsed.repository = result.repository;
-        
+
+        // Enrich with last commit author from GitHub when available
+        if (!parsed.contributors) parsed.contributors = {};
+        try {
+          const lastCommit = await fetchLastCommitAuthor(
+            result.repository.owner,
+            result.repository.repo,
+            result.path,
+          );
+          if (!parsed.contributors.scout && lastCommit?.login) {
+            parsed.contributors.scout = lastCommit.login;
+          } else if (!parsed.contributors.scout && result.repository?.owner) {
+            // Fallback: use repository owner when commit author is unavailable
+            parsed.contributors.scout = result.repository.owner;
+          }
+        } catch (e) {
+          console.warn('Failed to enrich global search spark with last commit author:', e);
+          if (!parsed.contributors.scout && result.repository?.owner) {
+            parsed.contributors.scout = result.repository.owner;
+          }
+        }
+
         if (onSparkLoad) {
           onSparkLoad(parsed);
         }
