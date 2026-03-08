@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-The Scribe v2.0 Brain - Glass Box AI Agent for TheCommons
+The Scribe v2.0 Brain - Glass Box AI Agent for Primer
 
 This is the core router that:
 1. Detects available hardware (NVIDIA GPU, Apple Metal, CPU)

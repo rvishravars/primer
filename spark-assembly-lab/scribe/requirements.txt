@@ -1,5 +1,5 @@
 # Scribe v2.0 Requirements
-# CPU-optimized Glass Box AI Agent for TheCommons
+# CPU-optimized Glass Box AI Agent for Primer
 
 # Core dependencies (required)
 requests>=2.31.0

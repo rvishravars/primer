@@ -1,10 +1,10 @@
-# Contributing to TheCommons
+# Contributing to Primer
 
-Welcome! TheCommons thrives on collaboration, open ideas, and community contributions. We're excited to have you help expand and improve this lightweight, Git-backed framework.
+Welcome! Primer thrives on collaboration, open ideas, and community contributions. We're excited to have you help expand and improve this lightweight, Git-backed framework.
 
 ## Our Philosophy
 
-TheCommons is built on principles of:
+Primer is built on principles of:
 - **Lightweight Design**: Keep it simple, fast, and easy to understand
 - **Git-Backed**: All content and data live in Git repositories
 - **Open Collaboration**: Ideas are shared, discussed, and refined together
@@ -17,13 +17,13 @@ TheCommons is built on principles of:
 Have an idea for a new feature, improvement, or expansion? We'd love to hear it!
 
 **Start by opening an enhancement issue on GitHub:**
-- Go to the [GitHub Issues](https://github.com/rvishravars/thecommons/issues) page
+- Go to the [GitHub Issues](https://github.com/rvishravars/primer/issues) page
 - Click "New Issue"
 - Select the "Enhancement" template (or create a blank issue)
 - Clearly describe:
   - **What problem does this solve?**
   - **How would it work?**
-  - **Why is it important for TheCommons?**
+  - **Why is it important for Primer?**
   - **Any alternative approaches you considered**
 
 Examples of great contributions:
@@ -88,8 +88,8 @@ Documentation improvements are always welcome!
 
 ```bash
 # Clone the repository
-git clone https://github.com/rvishravars/thecommons.git
-cd thecommons
+git clone https://github.com/rvishravars/primer.git
+cd primer
 
 # Start the development environment
 cd spark-assembly-lab
@@ -101,7 +101,7 @@ docker compose up --build
 ### Project Structure
 
 ```
-thecommons/
+primer/
 ├── spark-assembly-lab/          # Main application
 │   ├── src/                     # React frontend
 │   ├── server_py/               # Flask backend
@@ -164,6 +164,6 @@ After your first contribution, you might:
 
 ---
 
-**Thank you for helping build TheCommons!** Every contribution—no matter how small—makes the framework better for everyone. 🙌
+**Thank you for helping build Primer!** Every contribution—no matter how small—makes the framework better for everyone. 🙌
 
-**Ready to contribute?** → [Create an issue](https://github.com/rvishravars/thecommons/issues/new)
+**Ready to contribute?** → [Create an issue](https://github.com/rvishravars/primer/issues/new)

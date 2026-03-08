@@ -35,7 +35,7 @@ The Spark Assembly Lab uses GitHub OAuth to allow users to log in with their Git
 
 Follow the same steps, but:
 - Use your organization's homepage URL
-- Use your production callback URL (e.g., `https://sparks.thecommons.community/auth/callback`)
+- Use your production callback URL (e.g., `https://sparks.primer.community/auth/callback`)
 
 ## Configuration
 

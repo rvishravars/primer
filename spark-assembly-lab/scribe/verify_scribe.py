@@ -151,7 +151,7 @@ def main():
     else:
         print("⚠️  SOME CHECKS FAILED - Please review above")
         print("\n💡 Troubleshooting:")
-        print("   • Check that you're in the thecommons directory")
+        print("   • Check that you're in the primer directory")
         print("   • Ensure Python 3.8+ is installed")
         print("   • Run: pip install -r scribe/requirements.txt")
         print("   • See SCRIBE_TESTING_GUIDE.md for help")

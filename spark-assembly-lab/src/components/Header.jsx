@@ -40,7 +40,7 @@ export default function Header({ theme, onThemeChange, onMenuToggle, onSidebarTo
                 Spark Assembly Lab
               </h1>
               <p className="text-xs sm:text-sm theme-muted hidden sm:block">
-                TheCommons v2.0 | Build in LEGO-style
+                Primer v2.0 | Build in LEGO-style
               </p>
             </div>
           </button>
@@ -85,7 +85,7 @@ export default function Header({ theme, onThemeChange, onMenuToggle, onSidebarTo
           <GitHubAuth user={user} onUserChange={onUserChange} />
 
           <a
-            href="https://github.com/rvishravars/thecommons"
+            href="https://github.com/rvishravars/primer"
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg theme-button p-2 transition-colors"

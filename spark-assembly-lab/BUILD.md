@@ -81,7 +81,7 @@ Create `.env` file in `spark-assembly-lab/`:
 ```bash
 # GitHub Configuration
 GITHUB_TOKEN=your_github_token_here
-SPARK_REPO=rvishravars/thecommons
+SPARK_REPO=rvishravars/primer
 
 # Cache Configuration
 SPARK_CACHE_TTL_SECONDS=60

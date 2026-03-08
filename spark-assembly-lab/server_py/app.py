@@ -264,7 +264,7 @@ def health_check():
 @app.get("/api/sparks")
 def get_sparks():
     now = int(time.time() * 1000)
-    repo_input = request.args.get("repo") or get_env("SPARK_REPO", "rvishravars/thecommons")
+    repo_input = request.args.get("repo") or get_env("SPARK_REPO", "rvishravars/primer")
     branch = request.args.get("branch") or "main"
     search_path = request.args.get("path") or "sparks"
 
@@ -345,7 +345,7 @@ def run_mission_file():
 
 def generate_quiz_prompt(spark_content: str, spark_data: Dict[str, Any], focus: str = "spark") -> str:
         """Generate a prompt for AI to create quiz questions based on spark content."""
-        prompt = f"""You are an expert quiz generator for TheCommons Spark Assembly Lab.
+        prompt = f"""You are an expert quiz generator for Primer Spark Assembly Lab.
 
 This quiz is a reflection exercise to strengthen the spark. There are no right answers.
 Focus the questions on: {focus.upper()}.
@@ -354,7 +354,7 @@ Generate 5 multiple-choice quiz questions based on the following Spark document.
 1. The problem/gap identified in the SPARK phase
 2. The Novel Core (10% Delta) in the DESIGN phase
 3. The technical implementation in the LOGIC phase
-4. TheCommons framework concepts (roles, rewards, assembly line)
+4. Primer framework concepts (roles, rewards, assembly line)
 5. The overall spark's value proposition
 
 Spark Name: {spark_data.get('name', 'Unknown')}

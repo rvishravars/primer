@@ -37,7 +37,7 @@ EXAMPLE_SPARK = """# 🧩 Spark: GitHub Reputation Decay Algorithm
   
 * **The Interface:** 
   - Snap into GitHub API: Read contributor's commit history
-  - Snap into TheCommons merit system: Recalculate CS on-demand
+  - Snap into Primer merit system: Recalculate CS on-demand
   - Snap into Spark Assembly UI: Show "Reputation Freshness" score (0-100)
 
 * **Prior Art:** GitHub Contributions API only counts commits (static). Existing reputation systems (StackOverflow, Discourse) don't decay—they only accumulate.

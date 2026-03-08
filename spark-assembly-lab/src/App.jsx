@@ -13,7 +13,7 @@ function AppMain() {
   console.log('🎯 App component rendering!');
   const [theme, setTheme] = useState(() => localStorage.getItem('sparkTheme') || 'studio');
   const [selectedSpark, setSelectedSpark] = useState(null);
-  const [repoUrl, setRepoUrl] = useState(() => localStorage.getItem('sparkRepoUrl') || 'https://github.com/rvishravars/thecommons');
+  const [repoUrl, setRepoUrl] = useState(() => localStorage.getItem('sparkRepoUrl') || 'https://github.com/rvishravars/primer');
   const [branch, setBranch] = useState(() => localStorage.getItem('sparkBranch') || 'main');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [originalSparkData, setOriginalSparkData] = useState(null);

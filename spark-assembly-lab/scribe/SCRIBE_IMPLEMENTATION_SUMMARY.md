@@ -19,7 +19,7 @@ The Scribe v2.0 Glass Box AI Agent has been successfully implemented according t
 **Branch:** `feat/scribe-v2-nano`
 - All commits logged to this branch
 - Ready for PR and code review
-- Follows TheCommons workflow
+- Follows Primer workflow
 
 ### 3. ✅ Directory Structure Built
 ```
@@ -300,7 +300,7 @@ console.log(status.thinking_step);  // "Checking Clutch Power..."
 
 ## 🎉 Conclusion
 
-The Scribe v2.0 is now **production-ready** and fully aligned with TheCommons Manifesto. It provides:
+The Scribe v2.0 is now **production-ready** and fully aligned with Primer Manifesto. It provides:
 
 - ✅ Automated validation of Sparks
 - ✅ Transparent Glass Box reasoning

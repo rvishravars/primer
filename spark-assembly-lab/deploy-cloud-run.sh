@@ -8,7 +8,7 @@ set -e
 # Configuration
 SERVICE_NAME="spark-assembly-lab"
 REGION="us-central1" # Change if needed
-REPO_NAME="thecommons-repo"
+REPO_NAME="primer-repo"
 
 echo "🚀 Starting deployment of $SERVICE_NAME to Google Cloud Run..."
 
@@ -42,7 +42,7 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location="$REGION" &>
     gcloud artifacts repositories create "$REPO_NAME" \
         --repository-format=docker \
         --location="$REGION" \
-        --description="TheCommons Project Docker Repository" \
+        --description="Primer Project Docker Repository" \
         --quiet
 fi
 
@@ -84,7 +84,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --platform managed \
     --region "$REGION" \
     --allow-unauthenticated \
-    --set-env-vars "GITHUB_OWNER=rvishravars,GITHUB_REPO=thecommons,GITHUB_BRANCH=main,GITHUB_SPARKS_PATH=sparks,SPARK_CACHE_TTL_SECONDS=60" \
+    --set-env-vars "GITHUB_OWNER=rvishravars,GITHUB_REPO=primer,GITHUB_BRANCH=main,GITHUB_SPARKS_PATH=sparks,SPARK_CACHE_TTL_SECONDS=60" \
     --memory 128Mi \
     --cpu 1 \
     --max-instances 1 \

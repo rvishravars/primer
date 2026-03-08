@@ -819,7 +819,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
 
                   {isSubmitting ? (
                     <div className="py-4 text-center font-mono text-sm font-bold text-logic-400 animate-pulse uppercase tracking-[0.2em]">
-                      Synchronizing with TheCommons...
+                      Synchronizing with Primer...
                     </div>
                   ) : (
                     <div className="flex flex-col sm:flex-row gap-3 pt-2">
