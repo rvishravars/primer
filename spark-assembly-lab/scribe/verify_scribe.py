@@ -51,7 +51,6 @@ def main():
         "prompts/shape_eval.md",
         "logic/stability_audit.py",
         "models/downloader.py",
-        "../sparks/scribe-v2-implementation.md"
     ]
     
     all_exist = True
