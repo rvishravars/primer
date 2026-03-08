@@ -134,7 +134,7 @@ export default function QuizModal({ sparkData, onClose }) {
     };
     const focusTitle = focusMap[quizMode] || 'GENERAL';
 
-    return `You are an expert quiz generator for TheCommons Spark Assembly Lab.
+    return `You are an expert quiz generator for Primer Spark Assembly Lab.
 
 This quiz is a reflection exercise to strengthen the spark. There are no right answers.
 Focus the questions on: ${focusTitle}.
@@ -143,7 +143,7 @@ Generate 5 multiple-choice quiz questions based on the following Spark document.
 1. The problem/gap identified in the SPARK phase
 2. The Novel Core (10% Delta) in the DESIGN phase
 3. The technical implementation in the LOGIC phase
-4. TheCommons framework concepts (roles, rewards, assembly line)
+4. Primer framework concepts (roles, rewards, assembly line)
 5. The overall spark's value proposition
 
 Spark Name: ${sparkData.name}

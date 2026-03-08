@@ -1,10 +1,10 @@
 # 🧠 Scribe v2.0 - Glass Box AI Agent
 
-The Scribe v2.0 is TheCommons' deterministic, hardware-agnostic AI agent for evaluating and validating Sparks. It runs locally on your CPU by default, with optional GPU acceleration and cloud API fallback.
+The Scribe v2.0 is Primer's deterministic, hardware-agnostic AI agent for evaluating and validating Sparks. It runs locally on your CPU by default, with optional GPU acceleration and cloud API fallback.
 
 ## 📋 Overview
 
-The Scribe enforces TheCommons Manifesto through three key functions:
+The Scribe enforces Primer Manifesto through three key functions:
 
 1. **Narrative Auditor (Section 1)** - Validates Spark Narratives for clarity and specificity (Seed maturity)
 2. **Design & Hypothesis Validator (Sections 2-4)** - Validates Design submissions for novelty, falsifiability, and feasibility (Structured/Modeled maturity)
@@ -250,9 +250,9 @@ print(HardwareDetector.detect_gpu())  # Should be True if CUDA available
 
 ## 📚 References
 
-- [MANIFESTO.md](../docs/MANIFESTO.md) - TheCommons principles
+- [MANIFESTO.md](../docs/MANIFESTO.md) - Primer principles
 - [scribe-v2-implementation.spark](../sparks/scribe-v2-implementation.md) - Design document
 
 ## 📝 License
 
-TheCommons - See [LICENSE](../LICENSE)
+Primer - See [LICENSE](../LICENSE)

@@ -1,6 +1,6 @@
 # Spark Assembly Lab
 
-A React-based modular interface for building and visualizing **Enhanced Sparks** in TheCommons v3.0 maturity meritocracy.
+A React-based modular interface for building and visualizing **Enhanced Sparks** in Primer v3.0 maturity meritocracy.
 
 ## 📸 Screenshots
 
@@ -118,6 +118,6 @@ Stability is no longer a simple 1-2-3 count. It is calculated based on the numbe
 
 ## 📄 License
 
-Part of TheCommons v3.0 - Modular Meritocracy.
+Part of Primer v3.0 - Modular Meritocracy.
 
 > *"Execution is the Moat. Build with clarity. Validate with rigor."*

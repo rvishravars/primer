@@ -1,7 +1,7 @@
 {
   "name": "spark-assembly-lab",
   "version": "2.0.0",
-  "description": "LEGO-style Spark Builder for TheCommons v2.0",
+  "description": "LEGO-style Spark Builder for Primer v2.0",
   "private": true,
   "type": "module",
   "scripts": {

@@ -1,10 +1,10 @@
-# 📜 TheCommons: Master Framework (v3.0)
+# 📜 Primer: Master Framework (v3.0)
 
 ### *For the Architects of the Open Build.*
 
 Every day, a world-changing idea dies in a basement because its creator lacked a platform, a connection, or a seat at the table. History is littered with the names we *don't* know — the innovators who were sidelined because they had the insight but lacked the framework to validate it.
 
-**TheCommons** is a tribute to them. 
+**Primer** is a tribute to them. 
 
 We are building a **Modular Idea Meritocracy** — a "LEGO set" for human progress. We believe that ideas shouldn't be locked in vaults; they should be designed as interoperable, falsifiable sparks that anyone can refine. We honor the inventor by providing the baseplate for their vision to become documented, modelled, and implemented reality.
 

@@ -1,6 +1,6 @@
 # 🧠 Scribe v3.0 - Getting Started Guide
 
-Welcome to the Scribe v3.0 Glass Box AI Agent for TheCommons! This guide will help you understand and use the system.
+Welcome to the Scribe v3.0 Glass Box AI Agent for Primer! This guide will help you understand and use the system.
 
 ## 📋 Quick Overview
 

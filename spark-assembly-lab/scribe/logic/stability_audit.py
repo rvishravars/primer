@@ -313,7 +313,7 @@ class StabilityAuditor:
 #     import argparse
 # 
 #     parser = argparse.ArgumentParser(
-#         description="Stability Audit for TheCommons Sparks"
+#         description="Stability Audit for Primer Sparks"
 #     )
 #     parser.add_argument("--file", type=Path, help="Specific Spark file to audit")
 #     parser.add_argument("--dir", type=Path, default=Path("sparks"), help="Directory containing Sparks")

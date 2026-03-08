@@ -8,7 +8,7 @@ set -e
 # Configuration (These must match deploy-cloud-run.sh)
 SERVICE_NAME="spark-assembly-lab"
 REGION="us-central1" 
-REPO_NAME="thecommons-repo"
+REPO_NAME="primer-repo"
 
 echo "🚨 Starting teardown of $SERVICE_NAME from Google Cloud Run..."
 

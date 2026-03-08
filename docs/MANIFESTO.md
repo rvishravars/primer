@@ -1,4 +1,4 @@
-# 📜 TheCommons: Master Framework (v3.0)
+# 📜 Primer: Master Framework (v3.0)
 
 > *"The Commons rewards the intuition to see the gap, the design to shape it, and the logic to make it stick — and the discipline to validate it."*
 
@@ -8,7 +8,7 @@
 
 ### 1. The Spark as the Unit of Value
 
-TheCommons is a **modular idea meritocracy**. Every contribution is a **Spark** — a structured, falsifiable idea that evolves through defined maturity stages. We value **"Clutch Power"**: the ability of a spark to be validated, built upon, and snapped into the commons.
+Primer is a **modular idea meritocracy**. Every contribution is a **Spark** — a structured, falsifiable idea that evolves through defined maturity stages. We value **"Clutch Power"**: the ability of a spark to be validated, built upon, and snapped into the commons.
 
 A Spark is not owned by a single role. It is a living document that any contributor can advance — from a raw observation to a deployed reality.
 
@@ -63,7 +63,7 @@ The AI Scribe is the system's **Automated Standards Enforcer**, not a gatekeeper
 
 ## 🏛️ Theoretical Foundation
 
-TheCommons is built upon decades of research into decentralised cooperation, institutional economics, and stigmergic systems.
+Primer is built upon decades of research into decentralised cooperation, institutional economics, and stigmergic systems.
 
 ### 1. The Governance of the Commons
 Based on **Elinor Ostrom** (*Governing the Commons*, 1990).
@@ -94,7 +94,7 @@ Based on **Dabbish et al.** (*Social Translucence in GitHub*, 2012).
 
 ## Part 2: The Enhanced Spark Standard
 
-All sparks in TheCommons must follow the **Enhanced Spark Template** (`templates/enhanced_spark.md`). A valid spark file contains:
+All sparks in Primer must follow the **Enhanced Spark Template** (`templates/enhanced_spark.md`). A valid spark file contains:
 
 ### Frontmatter (Metadata)
 ```yaml
