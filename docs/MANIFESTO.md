@@ -16,24 +16,19 @@ A Spark is not owned by a single role. It is a living document that any contribu
 
 Influence is earned through tangible value. The system rewards the full "Chain of Value" — from the first hunch to the final deployed code.
 
-#### 2.1 The Contribution Value Hierarchy
 
-CS (Contribution Score) is earned by advancing a spark's maturity:
+#### 2.1 Contribution Roles
 
-| Action | Reward | Trigger |
-| :--- | :--- | :--- |
-| **Open a Spark** | +5 CS | Submit a valid Spark Narrative (Section 1 + 2) |
-| **Formalize a Hypothesis** | +10 CS | Complete Section 2 (falsifiable statement) |
-| **Model or Simulate** | +15 CS | Complete Sections 3 & 4 |
-| **Validate with Evidence** | +25 CS | Populate Section 6 (Results) |
-| **Implement & Deploy** | +35 CS | Spark reaches `implemented` maturity |
-| **Structural Amendment** | +50 CS | Propose a Manifesto-level change |
+There are only two roles for a spark:
 
-#### 2.2 Collaboration Bonuses
+- **Opener:** The contributor who initiates the spark (submits the narrative and hypothesis).
+- **Advancer:** Any contributor who advances the spark through modeling, validation, implementation, or amendment.
 
-* **The Echo Bonus:** If someone advances a spark you opened (Sections 3–6), you receive **+5 CS**.
-* **The Validation Bonus:** If your modelled spark is confirmed by an independent replication or peer critique (Section 5), earn **+10 CS**.
-* **The Stability Audit:** Earn **+10 CS** for identifying a critical flaw in a merged spark and providing a corrective revision.
+CS (Contribution Score) is earned by opening or advancing a spark. The Opener receives an initial score for starting the spark, and each Advancer receives score for meaningful progression.
+
+#### 2.2 Collaboration Bonus
+
+If someone advances a spark you opened, you receive a bonus. Advancers earn additional score for critical improvements or validations.
 
 #### 2.3 Logarithmic Voting Power
 
