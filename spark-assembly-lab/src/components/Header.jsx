@@ -123,7 +123,7 @@ export default function Header({ theme, onThemeChange, viewMode, onViewModeChang
           <GitHubAuth user={user} onUserChange={onUserChange} />
 
           <a
-            href="https://github.com/rvishravars/primer"
+            href="https://github.com/rvishravars/primer-sparks"
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg theme-button p-2 transition-colors"

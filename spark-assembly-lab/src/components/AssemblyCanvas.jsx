@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, ChevronLeft, ChevronRight, Plus, MessageCircle } from 'lucide-react';
 import MarkdownPreview from './MarkdownPreview';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -8,6 +8,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import QuizModal from './QuizModal';
 import PRTracker from './PRTracker';
+import CommentsPanel from './CommentsPanel';
 import { generateSparkMarkdown, parseSparkFile, validateSparkData } from '../utils/sparkParser';
 import { useToast } from '../utils/ToastContext';
 import { getStoredToken, getStoredUserInfo, parseRepoUrl } from '../utils/github';
@@ -44,6 +45,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
   const [showPRTracker, setShowPRTracker] = useState(false);
+  const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,6 +83,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   useEffect(() => {
     setShowPreview(false);
     setShowPRTracker(false);
+    setShowCommentsPanel(false);
     if (viewMode === 'markdown') {
       setShowMarkdownPreview(false);
     }
@@ -538,6 +541,21 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
               </button>
 
               <button
+                onClick={() => {
+                  const next = !showCommentsPanel;
+                  setShowCommentsPanel(next);
+                  if (next) {
+                    setShowPRTracker(false);
+                  }
+                }}
+                className="hidden sm:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors"
+                title="View comments"
+                aria-label="View comments"
+              >
+                <MessageCircle className="h-4 w-4 theme-muted" />
+              </button>
+
+              <button
                 onClick={handleCopyToClipboard}
                 className="hidden md:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors"
                 title="Copy markdown to clipboard"
@@ -638,6 +656,14 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       ) : showPRTracker ? (
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <PRTracker
+            repoUrl={repoUrl}
+            sparkFile={originalSparkData?.sourcePath || sparkData.sourcePath}
+            user={user}
+          />
+        </div>
+      ) : showCommentsPanel ? (
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <CommentsPanel
             repoUrl={repoUrl}
             sparkFile={originalSparkData?.sourcePath || sparkData.sourcePath}
             user={user}

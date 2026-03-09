@@ -675,6 +675,81 @@ export const fetchCommitDetails = async (owner, repo, sha) => {
 };
 
 /**
+ * Fetch issue or pull request comments (conversation) for a given number
+ * Note: PRs are also issues in the GitHub API, so this works for both.
+ */
+export const fetchIssueComments = async (owner, repo, number) => {
+  try {
+    const url = `https://api.github.com/repos/${owner}/${repo}/issues/${number}/comments?per_page=100`;
+
+    const response = await fetch(url, {
+      headers: buildGitHubHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch comments: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Failed to fetch comments for #${number}:`, error);
+    return [];
+  }
+};
+
+/**
+ * Fetch discussions in a repository
+ */
+export const fetchDiscussions = async (owner, repo) => {
+  try {
+    const url = `https://api.github.com/repos/${owner}/${repo}/discussions?per_page=100`;
+
+    const response = await fetch(url, {
+      headers: buildGitHubHeaders(),
+    });
+
+    if (!response.ok) {
+      // Many repos won't have Discussions enabled; treat 404 as "no discussions".
+      if (response.status === 404) {
+        return [];
+      }
+      throw new Error(`Failed to fetch discussions: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to fetch discussions:', error);
+    return [];
+  }
+};
+
+/**
+ * Fetch comments on a specific discussion
+ */
+export const fetchDiscussionComments = async (owner, repo, discussionNumber) => {
+  try {
+    const url = `https://api.github.com/repos/${owner}/${repo}/discussions/${discussionNumber}/comments?per_page=100`;
+
+    const response = await fetch(url, {
+      headers: buildGitHubHeaders(),
+    });
+
+    if (!response.ok) {
+      // As above, 404 likely means discussions not enabled.
+      if (response.status === 404) {
+        return [];
+      }
+      throw new Error(`Failed to fetch discussion comments: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error(`Failed to fetch comments for discussion #${discussionNumber}:`, error);
+    return [];
+  }
+};
+
+/**
  * Global search for .spark.md files across all GitHub repositories
  * @param {string} searchQuery - Search query (can include keywords, org:name, user:name, etc.)
  * @param {Object} options - Search options
