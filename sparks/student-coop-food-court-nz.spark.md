@@ -2,7 +2,7 @@
 
 # 1. Spark Narrative
 
-Universities in New Zealand face a recurring tension between affordable, healthy food options for students and the commercial incentives of traditional campus food vendors. Many students rely on expensive or low-nutrition food because the on-campus supply is optimized for profit and convenience rather than simple, basic, healthy meals.
+Students at New Zealand universities often juggle tight budgets, busy study schedules, and limited time or facilities to prepare their own food. On-campus options, shaped by broader cost-of-living and commercial pressures, can make it difficult for some students to regularly access simple, basic, healthy meals at a predictable, low price.
 
 This spark proposes a **student-run cooperative food court** where the core operations—menu design, sourcing, cooking, and service—are owned and governed by the student body. Instead of external franchises, the food court runs as a cooperative with a small paid core staff and a broader member base: students contribute time and membership fees, surplus is reinvested in lower prices, better ingredients, and modest stipends, and decision-making is transparent and democratic. Meals are **rationed for members** (e.g., simple daily/weekly limits per student) so that food is used for basic needs rather than commercial resale or bulk hoarding.
 
@@ -60,7 +60,7 @@ The shift is from **"students as customers"** to **"students as co-owners"** of 
 	- Average price of a standard meal at the coop vs comparable campus vendors.
 	- Target: ≥25% lower average price for a nutritionally comparable meal.
 - **Financial Viability:**
-	- Break-even or positive net operating income over an academic year.whats the major issue faced by international students studying in new zealand and what are some stats backed ideas to solve them
+	- Break-even or positive net operating income over an academic year.
 	- Cash flow stability (no more than one month in arrears on key obligations).
 - **Student Value / Satisfaction:**
 	- Survey scores on: "I can afford to eat well on campus", "I feel this food court is run by and for students".
@@ -75,3 +75,29 @@ The shift is from **"students as customers"** to **"students as co-owners"** of 
 - **Support scale-up** if: cost reduction and break-even targets are met, satisfaction is ≥ baseline, and participation is stable or growing.
 - **Iterate** if: partial success (e.g., better affordability but persistent small losses) suggests pricing, menu mix, or labor model adjustments.
 - **Stop or redesign** if: the model cannot approach break-even without heavy external subsidy, or students consistently report poor quality/experience.
+
+---
+
+# 5. Feedback & Critique
+
+- (To be populated after initial modeling or pilot feedback.)
+
+---
+
+# 6. Results (When Available)
+
+- (To be populated once pilot or simulation data is available.)
+
+---
+
+# 7. Revision Notes
+
+- (Use this section to record how the spark evolves over time.)
+
+---
+
+# 8. Next Actions
+
+- [ ] Design a short survey asking students about weekly food spend (total, on-campus, and off-campus), number of campus meals, and basic demographics (domestic/international, living situation).
+- [ ] Recruit a small volunteer sub-group to keep receipts or log all food purchases for 1–2 weeks, to validate and deepen the survey estimates.
+- [ ] Compile a simple spreadsheet that aggregates survey and diary data, and compare it with publicly available New Zealand cost-of-living and food price statistics (e.g., Stats NZ, NZUSA reports).
