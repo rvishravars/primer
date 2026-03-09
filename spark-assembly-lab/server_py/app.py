@@ -373,110 +373,65 @@ def run_mission_file():
     return jsonify(result)
 
 
-def generate_quiz_prompt(spark_content: str, spark_data: Dict[str, Any], focus: str = "spark") -> str:
-        """Generate a prompt for AI to create quiz questions based on spark content."""
-        prompt = f"""You are an expert quiz generator for Primer Spark Assembly Lab.
-
-This quiz is a reflection exercise to strengthen the spark. There are no right answers.
-Focus the questions on: {focus.upper()}.
-
-Generate 5 multiple-choice quiz questions based on the following Spark document. Questions should test understanding of:
-1. The problem/gap identified in the SPARK phase
-2. The Novel Core (10% Delta) in the DESIGN phase
-3. The technical implementation in the LOGIC phase
-4. Primer framework concepts (roles, rewards, assembly line)
-5. The overall spark's value proposition
-
-Spark Name: {spark_data.get('name', 'Unknown')}
-
-Spark Content:
-{spark_content[:3000]}
-
-Return ONLY a valid JSON array with this exact structure (no markdown, no explanation):
-[
-    {{
-        "question": "Question text here?",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "phase": "spark"
-    }}
-]
-
-Phase values must be one of: "spark", "design", "logic", or "general".
-Do NOT include correct answers.
-Make questions engaging and educational."""
-        return prompt
 
 
-def generate_quiz_with_openai(spark_content: str, spark_data: Dict[str, Any], api_key: str, model: str = "gpt-4o-mini", prompt_override: Optional[str] = None, focus: str = "spark") -> List[Dict[str, Any]]:
-    """Generate quiz questions using OpenAI GPT-4."""
+def generate_workbench_reply_with_openai(
+    spark_content: str,
+    spark_data: Dict[str, Any],
+    messages: List[Dict[str, str]],
+    api_key: str,
+    model: str = "gpt-4o-mini",
+) -> Dict[str, str]:
+    """Generate an AI workbench reply using OpenAI.
+
+    Returns a dict with keys:
+      - reply: natural-language assistant message
+      - updatedSpark: full markdown string with the updated spark, or empty string if no changes
+    """
     if not OPENAI_AVAILABLE:
         raise RuntimeError("OpenAI SDK not installed")
-    
+
     try:
-        # Initialize client with only the api_key parameter
         client = openai.OpenAI(api_key=api_key)
     except TypeError as e:
-        # Handle version compatibility issues
-        raise RuntimeError(f"OpenAI client initialization failed. Please ensure openai>=1.30.0 is installed. Error: {e}")
-    
-    prompt = prompt_override or generate_quiz_prompt(spark_content, spark_data, focus)
-    
+        raise RuntimeError(
+            f"OpenAI client initialization failed. Please ensure openai>=1.30.0 is installed. Error: {e}"
+        )
+
+    # Compress conversation for the model
+    history_lines: List[str] = []
+    for m in messages[-10:]:  # limit history to last 10 turns
+        role = (m.get("role") or "user").capitalize()
+        content = m.get("content") or ""
+        history_lines.append(f"{role}: {content}")
+
+    payload = {
+        "sparkName": spark_data.get("name"),
+        "sparkContent": spark_content[:10000],
+        "conversation": history_lines,
+    }
+
+    system_prompt = (
+        "You are an AI workbench helping iteratively improve a Spark markdown document.\n"
+        "Always respond with **only** a JSON object (no markdown fences, no extra prose) with this exact shape:\n"
+        "{\n  \"reply\": \"short conversational response to the user\",\n  "
+        "\"updatedSpark\": \"full updated spark markdown when you propose concrete edits, or an empty string when you are only discussing\"\n}\n\n"
+        "If you suggest specific edits, include the entire updated spark document in updatedSpark. "
+        "Do not include any keys other than reply and updatedSpark."
+    )
+
     try:
         response = client.chat.completions.create(
             model=model,
             messages=[
-                {"role": "system", "content": "You are a quiz generator that returns only valid JSON arrays."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": json.dumps(payload)},
             ],
-            temperature=0.7,
-            max_tokens=2000
-        )
-        
-        content = response.choices[0].message.content
-        # Clean up potential markdown code blocks
-        content = content.strip()
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        content = content.strip()
-        
-        questions = json.loads(content)
-        return questions
-    except json.JSONDecodeError as err:
-        raise RuntimeError(f"OpenAI returned invalid JSON: {err}")
-    except Exception as err:
-        raise RuntimeError(f"OpenAI API error: {err}")
-
-
-def generate_quiz_with_anthropic(spark_content: str, spark_data: Dict[str, Any], api_key: str) -> List[Dict[str, Any]]:
-    """Generate quiz questions using Anthropic Claude."""
-    if not ANTHROPIC_AVAILABLE:
-        raise RuntimeError("Anthropic SDK not installed")
-    
-    try:
-        # Initialize client with only the api_key parameter
-        client = anthropic.Anthropic(api_key=api_key)
-    except TypeError as e:
-        # Handle version compatibility issues
-        raise RuntimeError(f"Anthropic client initialization failed. Please ensure anthropic>=0.25.0 is installed. Error: {e}")
-    
-    prompt = generate_quiz_prompt(spark_content, spark_data)
-    
-    try:
-        message = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
+            temperature=0.5,
             max_tokens=2000,
-            temperature=0.7,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
         )
-        
-        content = message.content[0].text
-        # Clean up potential markdown code blocks
+
+        content = response.choices[0].message.content or ""
         content = content.strip()
         if content.startswith("```json"):
             content = content[7:]
@@ -485,110 +440,55 @@ def generate_quiz_with_anthropic(spark_content: str, spark_data: Dict[str, Any],
         if content.endswith("```"):
             content = content[:-3]
         content = content.strip()
-        
-        questions = json.loads(content)
-        return questions
+
+        data = json.loads(content)
+        reply = data.get("reply") or ""
+        updated_spark = data.get("updatedSpark") or ""
+        return {"reply": reply, "updatedSpark": updated_spark}
     except json.JSONDecodeError as err:
-        raise RuntimeError(f"Anthropic returned invalid JSON: {err}")
+        raise RuntimeError(f"OpenAI returned invalid JSON for workbench reply: {err}")
     except Exception as err:
-        raise RuntimeError(f"Anthropic API error: {err}")
+        raise RuntimeError(f"OpenAI API error (workbench): {err}")
 
 
-@app.post("/api/quiz/generate")
-def generate_quiz():
-    """Generate AI-powered quiz questions for a spark."""
+
+
+@app.post("/api/workbench/message")
+def workbench_message():
+    """Handle a single AI workbench chat turn using OpenAI via the backend proxy."""
     payload = request.get_json(silent=True) or {}
-    provider = payload.get("provider")  # 'openai' or 'anthropic'
+    provider = payload.get("provider") or "openai"
     api_key = payload.get("apiKey")
-    spark_content = payload.get("sparkContent")
-    spark_data = payload.get("sparkData")
-    prompt_override = payload.get("prompt")
-    model_override = payload.get("model")
-    focus = payload.get("focus") or "spark"
-    
-    if not provider:
-        return jsonify({"error": "provider is required"}), 400
-    if not prompt_override and (not spark_content or not spark_data):
-        return jsonify({"error": "sparkContent and sparkData are required when prompt is not provided"}), 400
-    
-    if provider not in ["openai", "anthropic"]:
-        return jsonify({"error": "provider must be 'openai' or 'anthropic'"}), 400
-    
-    # Try to get API key from request or environment (fallback)
-    if not api_key:
-        if provider == "openai":
-            api_key = os.environ.get("OPENAI_API_KEY")
-        elif provider == "anthropic":
-            api_key = os.environ.get("ANTHROPIC_API_KEY")
-        
-        if not api_key:
-            provider_name = "OpenAI" if provider == "openai" else "Anthropic"
-            return jsonify({
-                "error": f"{provider_name} API key required. Please enter your API key in the quiz interface."
-            }), 400
-    
-    try:
-        if provider == "openai":
-            questions = generate_quiz_with_openai(
-                spark_content,
-                spark_data,
-                api_key,
-                model=model_override or "gpt-4o-mini",
-                prompt_override=prompt_override,
-                focus=focus,
-            )
-        else:  # anthropic
-            questions = generate_quiz_with_anthropic(spark_content, spark_data, api_key)
-        
-        return jsonify({"questions": questions})
-    except RuntimeError as err:
-        return jsonify({"error": str(err)}), 502
-    except Exception as err:
-        return jsonify({"error": f"Quiz generation failed: {err}"}), 500
-
-
-@app.post("/api/quiz/summary")
-def generate_quiz_summary():
-    """Generate a summary report for quiz responses."""
-    payload = request.get_json(silent=True) or {}
-    provider = payload.get("provider")  # 'openai'
-    api_key = payload.get("apiKey")
-    prompt_override = payload.get("prompt")
+    spark_content = payload.get("sparkContent") or ""
+    spark_data = payload.get("sparkData") or {}
+    messages = payload.get("messages") or []
     model_override = payload.get("model") or "gpt-4o-mini"
 
-    if not provider:
-        return jsonify({"error": "provider is required"}), 400
     if provider != "openai":
         return jsonify({"error": "provider must be 'openai'"}), 400
-    if not prompt_override:
-        return jsonify({"error": "prompt is required"}), 400
+    if not spark_content:
+        return jsonify({"error": "sparkContent is required"}), 400
+    if not isinstance(messages, list) or not messages:
+        return jsonify({"error": "messages array with at least one item is required"}), 400
 
     if not api_key:
         api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            return jsonify({"error": "OpenAI API key required. Please enter your API key in the quiz interface."}), 400
+            return jsonify({"error": "OpenAI API key required. Please enter your API key in the AI Workbench."}), 400
 
     try:
-        if not OPENAI_AVAILABLE:
-            raise RuntimeError("OpenAI SDK not installed")
-
-        client = openai.OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
+        result = generate_workbench_reply_with_openai(
+            spark_content,
+            spark_data,
+            messages,
+            api_key,
             model=model_override,
-            messages=[
-                {"role": "system", "content": "You are a Spark mentor that returns concise, structured feedback."},
-                {"role": "user", "content": prompt_override},
-            ],
-            temperature=0.4,
-            max_tokens=1200,
         )
-
-        content = response.choices[0].message.content or ""
-        return jsonify({"summary": content.strip()})
+        return jsonify(result)
     except RuntimeError as err:
         return jsonify({"error": str(err)}), 502
     except Exception as err:
-        return jsonify({"error": f"Summary generation failed: {err}"}), 500
+        return jsonify({"error": f"AI Workbench failed: {err}"}), 500
 
 
 @app.get("/api/prs")

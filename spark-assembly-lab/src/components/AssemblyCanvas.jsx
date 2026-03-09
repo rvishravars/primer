@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import QuizModal from './QuizModal';
+import AIWorkbenchModal from './AIWorkbenchModal';
 import PRTracker from './PRTracker';
 import CommentsPanel from './CommentsPanel';
 import { generateSparkMarkdown, parseSparkFile, validateSparkData } from '../utils/sparkParser';
@@ -54,6 +54,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   const [editingSection, setEditingSection] = useState(null);
   const [sectionDraft, setSectionDraft] = useState('');
   const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  const [aiApplied, setAiApplied] = useState(false);
   const [contributors, setContributors] = useState([]);
   const [contributorsLoading, setContributorsLoading] = useState(false);
   const [markdownDraft, setMarkdownDraft] = useState('');
@@ -260,6 +261,33 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
     setEditingSection(null);
   };
 
+  const handleApplySparkMarkdownFromAI = (markdown) => {
+    if (!markdown) return;
+    try {
+      const parsed = parseSparkFile(markdown);
+      const updated = {
+        ...sparkData,
+        name: parsed?.name || sparkData.name,
+        markedForDeletion:
+          typeof parsed?.markedForDeletion === 'boolean' ? parsed.markedForDeletion : sparkData.markedForDeletion,
+        sections: parsed?.sections || sparkData.sections,
+        proposals: parsed?.proposals || sparkData.proposals,
+      };
+      onSparkUpdate(updated);
+      // Keep markdown view in sync if user switches modes later.
+      try {
+        const storageKey = buildMarkdownDraftStorageKey(repoUrl, markdownDraftId);
+        localStorage.setItem(storageKey, markdown);
+      } catch (e) {
+        // Best-effort persistence.
+      }
+      setAiApplied(true);
+      toast.success('AI workbench suggestion applied. Review and sync when ready.');
+    } catch (e) {
+      toast.error('Failed to apply AI-generated spark changes.');
+    }
+  };
+
 
   const handleSubmit = async () => {
     // If confirmation is not yet shown, show it first
@@ -348,6 +376,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       message: 'Changes reset to original content.',
     });
     toast.success('Changes reset to original content.');
+    setAiApplied(false);
   };
 
   const handleDeleteRequest = async () => {
@@ -452,6 +481,11 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                   </span>
                 );
               })()}
+              {aiApplied && (
+                <span className="inline-flex items-center rounded-full px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] font-semibold bg-design-600/80 text-white/90">
+                  AI suggestion applied
+                </span>
+              )}
               {originalSparkData && originalSparkData.name !== sparkData.name && (
                 <span className="inline-flex items-center rounded-full px-2 sm:px-3 py-0.5 sm:py-1 text-xs font-semibold bg-yellow-600 text-white">
                   Edited
@@ -525,8 +559,8 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                 onClick={() => setShowQuiz(true)}
                 disabled={!user}
                 className="hidden sm:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
-                title="Open quiz"
-                aria-label="Open quiz"
+                title="Open AI workbench"
+                aria-label="Open AI workbench"
               >
                 <Brain className="h-4 w-4 text-design-400" />
               </button>
@@ -792,8 +826,14 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
             })()}
           </div>
 
-          {/* Quiz Modal */}
-          {showQuiz && <QuizModal sparkData={sparkData} onClose={() => setShowQuiz(false)} />}
+          {/* AI Workbench Modal */}
+          {showQuiz && (
+            <AIWorkbenchModal
+              sparkData={sparkData}
+              onClose={() => setShowQuiz(false)}
+              onApplyMarkdown={handleApplySparkMarkdownFromAI}
+            />
+          )}
 
           {/* Cool PR Confirmation Modal */}
           {showConfirmation && (
