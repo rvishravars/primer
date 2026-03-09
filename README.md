@@ -18,7 +18,6 @@ The Commons is governed by a meritocratic hierarchy where influence (Contributio
 
 **The Core Pillars:**
 *   **💡 The Spark:** The atomic unit of value. A structured markdown file following the [8-section standard](templates/enhanced_spark.md).
-*   **📈 Maturity Lifecycle:** Ideas evolve from `seed` → `structured` → `modeled` → `validated` → `implemented`.
 *   **🛠️ Execution is the Moat:** We reward the "rigor" — the modeling, experimental results, and code that makes an idea solid.
 *   **🔗 Interoperability:** Everything is designed to be snapped onto. No closed silos.
 *   **📡 Host-Agnostic:** Data belongs to the community. Transition-ready via the Scribe v2.0 protocol.
@@ -40,13 +39,6 @@ New to the Commons? Here is how you earn your seat at the table by advancing the
 Try the **[Live Demo](https://spark-assembly-lab-bgbmwuia5q-uc.a.run.app/)** to see the **Spark Assembly Lab** in action. Build Sparks using the new 8-section maturity-aware interface.
 
 👉 **[Launch Spark Assembly Lab](https://spark-assembly-lab-bgbmwuia5q-uc.a.run.app/)**
-
-**Key Features:**
-- **Two-Column Split View:** Fixed narrative on the left, swappable research modules on the right.
-- **8-Section Standard:** Full support for the Enhanced Spark template.
-- **Global Spark Search:** Find `.spark.md` files across all of GitHub with advanced filters.
-- **AI Scribe (Glass Box):** Get local-first feedback (Qwen2.5) on your spark's maturity and falsifiability.
-- **Stability Indicator:** Real-time completion tracking (e.g., 2/8 Sections Stable).
 
 ---
 
