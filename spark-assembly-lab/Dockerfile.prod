@@ -12,10 +12,6 @@ RUN npm install
 # Copy source
 COPY . ./
 
-# Ensure sparks are bundled into the static build
-RUN rm -rf public/sparks
-COPY sparks /app/spark-assembly-lab/public/sparks
-
 # Build
 RUN npm run build
 

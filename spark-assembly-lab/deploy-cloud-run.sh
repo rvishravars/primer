@@ -46,21 +46,9 @@ if ! gcloud artifacts repositories describe "$REPO_NAME" --location="$REGION" &>
         --quiet
 fi
 
-# 5. Prepare build context (Copy sparks into lab directory)
+# 5. Build and Push using Cloud Build
 echo "📂 Preparing build context..."
 LAB_DIR="."
-SPARKS_SRC_DIR="../sparks"
-
-if [ ! -d "$SPARKS_SRC_DIR" ]; then
-    echo "❌ Error: Could not find sparks directory at $SPARKS_SRC_DIR"
-    exit 1
-fi
-
-# Create a local sparks folder for Docker context
-mkdir -p "$LAB_DIR/sparks"
-cp -r "$SPARKS_SRC_DIR"/* "$LAB_DIR/sparks/"
-
-# 6. Build and Push using Cloud Build
 IMAGE_TAG="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$SERVICE_NAME:latest"
 
 echo "🛠️ Building and pushing image to Artifact Registry..."
@@ -90,9 +78,6 @@ gcloud run deploy "$SERVICE_NAME" \
     --max-instances 1 \
     --port 8080 \
     --quiet
-
-# Clean up
-rm -rf "$LAB_DIR/sparks"
 
 echo ""
 echo "🎉 Deployment complete!"
