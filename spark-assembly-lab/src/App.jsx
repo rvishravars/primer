@@ -12,6 +12,7 @@ import { ENHANCED_SPARK_TEMPLATE } from './utils/templates';
 function AppMain() {
   console.log('🎯 App component rendering!');
   const [theme, setTheme] = useState(() => localStorage.getItem('sparkTheme') || 'studio');
+  const [viewMode, setViewMode] = useState('components'); // 'components' | 'markdown'
   const [selectedSpark, setSelectedSpark] = useState(null);
   const [repoUrl, setRepoUrl] = useState(() => localStorage.getItem('sparkRepoUrl') || 'https://github.com/rvishravars/primer');
   const [branch, setBranch] = useState(() => localStorage.getItem('sparkBranch') || 'main');
@@ -156,6 +157,8 @@ function AppMain() {
       <Header
         theme={theme}
         onThemeChange={setTheme}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
         onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         isMobileMenuOpen={isMobileMenuOpen}
         user={user}
@@ -222,6 +225,7 @@ function AppMain() {
               onPRCreated={() => prRefreshCallback?.()}
               canPush={canPush}
               onNewSpark={handleNewSpark}
+              viewMode={viewMode}
             />
           ) : (
             <div className="flex h-full items-center justify-center p-4">

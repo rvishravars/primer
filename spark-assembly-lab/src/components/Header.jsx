@@ -6,7 +6,12 @@ const THEME_OPTIONS = [
   { value: 'light-theme', label: 'Light Theme' },
 ];
 
-export default function Header({ theme, onThemeChange, onMenuToggle, onSidebarToggle, user, onUserChange, onGoHome }) {
+const VIEW_OPTIONS = [
+  { value: 'components', label: 'Components' },
+  { value: 'markdown', label: 'Markdown' },
+];
+
+export default function Header({ theme, onThemeChange, viewMode, onViewModeChange, onMenuToggle, onSidebarToggle, user, onUserChange, onGoHome }) {
   return (
     <header className="border-b theme-border theme-surface px-4 sm:px-6 py-3 sm:py-4">
       <div className="flex items-center justify-between">
@@ -66,8 +71,28 @@ export default function Header({ theme, onThemeChange, onMenuToggle, onSidebarTo
             </select>
           </div>
 
-          {/* Mobile Theme Selector - Icon only */}
-          <div className="md:hidden">
+          {/* Desktop View Selector */}
+          <div className="hidden md:flex items-center space-x-2">
+            <label htmlFor="view-select" className="text-xs uppercase tracking-wider theme-subtle whitespace-nowrap">
+              View
+            </label>
+            <select
+              id="view-select"
+              value={viewMode}
+              onChange={(event) => onViewModeChange(event.target.value)}
+              className="rounded-lg border px-3 py-2 text-xs font-semibold theme-input"
+              aria-label="View"
+            >
+              {VIEW_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Mobile Theme + View Selector */}
+          <div className="md:hidden flex items-center space-x-2">
             <select
               value={theme}
               onChange={(event) => onThemeChange(event.target.value)}
@@ -75,6 +100,19 @@ export default function Header({ theme, onThemeChange, onMenuToggle, onSidebarTo
               aria-label="Theme"
             >
               {THEME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={viewMode}
+              onChange={(event) => onViewModeChange(event.target.value)}
+              className="rounded-lg border px-2 py-1.5 text-xs font-semibold theme-input"
+              aria-label="View"
+            >
+              {VIEW_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

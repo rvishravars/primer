@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, MoreVertical, Plus } from 'lucide-react';
+import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import MarkdownPreview from './MarkdownPreview';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -39,8 +39,7 @@ const buildMarkdownDraftStorageKey = (repoUrl, draftId) => {
   return `spark_lab_markdown_draft:${repoKey}:${safeDraftId}`;
 };
 
-export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, originalSparkData, onResetSpark, isReadOnly, onPRCreated, canPush = true, onNewSpark }) {
-  const [viewMode, setViewMode] = useState('components'); // 'components' | 'markdown'
+export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, originalSparkData, onResetSpark, isReadOnly, onPRCreated, canPush = true, onNewSpark, viewMode = 'components' }) {
   const [showPreview, setShowPreview] = useState(false);
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
@@ -52,7 +51,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   const [editStatus, setEditStatus] = useState(null);
   const [editingSection, setEditingSection] = useState(null);
   const [sectionDraft, setSectionDraft] = useState('');
-  const [showDropdown, setShowDropdown] = useState(false);
+  const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const [contributors, setContributors] = useState([]);
   const [contributorsLoading, setContributorsLoading] = useState(false);
   const [markdownDraft, setMarkdownDraft] = useState('');
@@ -77,6 +76,15 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   useEffect(() => {
     sparkDataRef.current = sparkData;
   }, [sparkData]);
+
+  // Reset some UI state when the global view mode changes
+  useEffect(() => {
+    setShowPreview(false);
+    setShowPRTracker(false);
+    if (viewMode === 'markdown') {
+      setShowMarkdownPreview(false);
+    }
+  }, [viewMode]);
 
   useEffect(() => {
     if (viewMode !== 'markdown') return;
@@ -453,133 +461,119 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
           </div>
 
           <div className="flex items-center gap-2">
-            {/* View Mode Selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs theme-subtle hidden sm:inline">View</span>
-              <select
-                value={viewMode}
-                onChange={(e) => {
-                  const nextMode = e.target.value;
-                  setViewMode(nextMode);
-                  setShowPreview(false);
-                  setShowPRTracker(false);
-                  if (nextMode === 'markdown') setShowMarkdownPreview(false);
-                }}
-                className="rounded-lg theme-button px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-colors"
-              >
-                <option value="components">Components</option>
-                <option value="markdown">Markdown</option>
-              </select>
-            </div>
-
-            {/* Primary Toggle: Create New Spark */}
+            {/* More Actions toggle: roll in / roll out */}
             <button
-              onClick={onNewSpark}
-              className="flex items-center justify-center rounded-lg bg-design-600 hover:bg-design-700 p-1.5 sm:p-2 transition-colors flex-shrink-0 group relative"
-              title="Create New Spark"
+              onClick={() => setToolbarExpanded(!toolbarExpanded)}
+              className="p-2 rounded-lg theme-button hover:bg-white/10 transition-colors flex-shrink-0"
+              title={toolbarExpanded ? 'Hide actions' : 'More actions'}
+              aria-expanded={toolbarExpanded}
             >
-              <Plus className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-              <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-[70] border border-white/10">
-                New Spark
-              </span>
-            </button>
-
-            {/* Primary Toggle: Preview/Edit */}
-            {viewMode === 'components' && (
-              <button
-                onClick={() => setShowPreview(!showPreview)}
-                className="flex items-center space-x-1 sm:space-x-2 rounded-lg theme-button px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap flex-shrink-0"
-              >
-                <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span>{showPreview ? 'Edit' : 'Preview'}</span>
-              </button>
-            )}
-
-            {/* Primary Action: Submit */}
-            <button
-              onClick={handleSubmit}
-              disabled={isSubmitting || isReadOnly || !isDirty}
-              className={`flex items-center space-x-1 sm:space-x-2 rounded-lg bg-logic-600 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold hover:bg-logic-700 transition-colors disabled:opacity-60 whitespace-nowrap flex-shrink-0 ${isReadOnly || !isDirty ? 'cursor-not-allowed grayscale' : ''}`}
-            >
-              <GitPullRequest className="h-3 w-3 sm:h-4 sm:w-4" />
-              <span>{canPush ? 'Submit' : 'Propose'}</span>
-            </button>
-
-            {/* Secondary Actions Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowDropdown(!showDropdown)}
-                className="p-2 rounded-lg theme-button hover:bg-white/10 transition-colors flex-shrink-0"
-                title="More actions"
-              >
-                <MoreVertical className="h-5 w-5" />
-              </button>
-
-              {showDropdown && (
-                <>
-                  {/* Backdrop to close dropdown */}
-                  <div
-                    className="fixed inset-0 z-[55]"
-                    onClick={() => setShowDropdown(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-48 rounded-xl theme-panel border theme-border shadow-2xl z-[60] py-2 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                    <button
-                      onClick={() => { setShowQuiz(true); setShowDropdown(false); }}
-                      disabled={!user}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-design-500/10 transition-colors disabled:opacity-50"
-                    >
-                      <Brain className="h-4 w-4 text-design-400" />
-                      <span>Quiz</span>
-                    </button>
-
-                    <button
-                      onClick={() => { setShowPRTracker(!showPRTracker); setShowDropdown(false); }}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-white/5 transition-colors"
-                    >
-                      <GitPullRequest className="h-4 w-4 theme-muted" />
-                      <span>Evolution</span>
-                    </button>
-
-                    <div className="h-px theme-border my-1 mx-2" />
-
-                    <button
-                      onClick={() => { handleCopyToClipboard(); setShowDropdown(false); }}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-white/5 transition-colors"
-                    >
-                      <Copy className="h-4 w-4 theme-muted" />
-                      <span>Copy MD</span>
-                    </button>
-
-                    <button
-                      onClick={() => { handleDownload(); setShowDropdown(false); }}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-white/5 transition-colors"
-                    >
-                      <Download className="h-4 w-4 theme-muted" />
-                      <span>Download</span>
-                    </button>
-
-                    <div className="h-px theme-border my-1 mx-2" />
-
-                    <button
-                      onClick={() => { handleReset(); setShowDropdown(false); }}
-                      disabled={!isDirty || isReadOnly}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-white/5 transition-colors disabled:opacity-50"
-                    >
-                      <RotateCcw className="h-4 w-4 text-yellow-500/80" />
-                      <span>Reset</span>
-                    </button>
-
-                    <button
-                      onClick={() => { handleDeleteRequest(); setShowDropdown(false); }}
-                      disabled={isSubmitting || isReadOnly || !originalSparkData}
-                      className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm hover:bg-red-500/10 text-red-400 transition-colors disabled:opacity-50"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      <span>Delete</span>
-                    </button>
-                  </div>
-                </>
+              {toolbarExpanded ? (
+                <ChevronRight className="h-5 w-5" />
+              ) : (
+                <ChevronLeft className="h-5 w-5" />
               )}
+            </button>
+
+            <div
+              className={`flex items-center gap-2 transition-all duration-200 origin-right ${
+                toolbarExpanded
+                  ? 'opacity-100 max-w-3xl translate-x-0'
+                  : 'opacity-0 max-w-0 -translate-x-2 pointer-events-none overflow-hidden'
+              }`}
+            >
+              {/* Primary Toggle: Create New Spark */}
+              <button
+                onClick={onNewSpark}
+                className="flex items-center justify-center rounded-lg bg-design-600 hover:bg-design-700 p-1.5 sm:p-2 transition-colors flex-shrink-0 group relative"
+                title="Create New Spark"
+              >
+                <Plus className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-[70] border border-white/10">
+                  New Spark
+                </span>
+              </button>
+
+              {/* Primary Toggle: Preview/Edit (icon only, tooltip text) */}
+              {viewMode === 'components' && (
+                <button
+                  onClick={() => setShowPreview(!showPreview)}
+                  className="flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 transition-colors flex-shrink-0"
+                  title={showPreview ? 'Switch to edit mode' : 'Preview spark'}
+                  aria-label={showPreview ? 'Switch to edit mode' : 'Preview spark'}
+                >
+                  <Eye className="h-4 w-4" />
+                </button>
+              )}
+
+              {/* Primary Action: Submit (icon only, tooltip text) */}
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting || isReadOnly || !isDirty}
+                className={`flex items-center justify-center rounded-lg bg-logic-600 p-2 sm:p-2.5 text-xs sm:text-sm font-semibold hover:bg-logic-700 transition-colors disabled:opacity-60 flex-shrink-0 ${isReadOnly || !isDirty ? 'cursor-not-allowed grayscale' : ''}`}
+                title={canPush ? 'Submit changes' : 'Propose changes'}
+                aria-label={canPush ? 'Submit changes' : 'Propose changes'}
+              >
+                <GitPullRequest className="h-4 w-4" />
+              </button>
+
+              {/* Secondary actions inline when expanded (icons only, tooltip text) */}
+              <button
+                onClick={() => setShowQuiz(true)}
+                disabled={!user}
+                className="hidden sm:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
+                title="Open quiz"
+                aria-label="Open quiz"
+              >
+                <Brain className="h-4 w-4 text-design-400" />
+              </button>
+
+              <button
+                onClick={() => setShowPRTracker(!showPRTracker)}
+                className="hidden sm:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors"
+                title="View evolution"
+                aria-label="View evolution"
+              >
+                <GitPullRequest className="h-4 w-4 theme-muted" />
+              </button>
+
+              <button
+                onClick={handleCopyToClipboard}
+                className="hidden md:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors"
+                title="Copy markdown to clipboard"
+                aria-label="Copy markdown to clipboard"
+              >
+                <Copy className="h-4 w-4 theme-muted" />
+              </button>
+
+              <button
+                onClick={handleDownload}
+                className="hidden md:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors"
+                title="Download markdown"
+                aria-label="Download markdown"
+              >
+                <Download className="h-4 w-4 theme-muted" />
+              </button>
+
+              <button
+                onClick={handleReset}
+                disabled={!isDirty || isReadOnly}
+                className="hidden lg:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
+                title="Reset to original"
+                aria-label="Reset to original"
+              >
+                <RotateCcw className="h-4 w-4 text-yellow-500/80" />
+              </button>
+
+              <button
+                onClick={handleDeleteRequest}
+                disabled={isSubmitting || isReadOnly || !originalSparkData}
+                className="hidden lg:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 text-red-400 hover:bg-red-500/10"
+                title="Delete spark"
+                aria-label="Delete spark"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
