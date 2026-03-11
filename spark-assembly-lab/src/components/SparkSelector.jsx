@@ -39,12 +39,6 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
     }
   }, [onPRRefresh]);
 
-  const getAuditBadge = (status) => {
-    if (status === 'GREEN') return 'bg-logic-600';
-    if (status === 'YELLOW') return 'bg-design-600';
-    return 'bg-red-600';
-  };
-
   const buildSparkEntry = useCallback((filename, content, sourcePath, lastCommit) => {
     console.log(`🛠️ Building spark entry for ${filename}, content length: ${content?.length || 0}`);
     const parsed = parseSparkFile(content);
