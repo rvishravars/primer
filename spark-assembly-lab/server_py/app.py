@@ -15,13 +15,6 @@ from typing import Dict, Any, List, Optional
 
 from flask import Flask, jsonify, request, send_from_directory
 
-try:
-    from scribe.missions import evaluate_spark_mission
-except ImportError:
-    import sys
-    sys.path.append(str(Path(__file__).resolve().parents[1]))
-    from scribe.missions import evaluate_spark_mission
-
 # Import AI SDKs
 try:
     import openai
@@ -155,7 +148,7 @@ def get_open_activity_count(owner: str, repo: str, spark_path: str, token: Optio
     pulls = fetch_json(pulls_url, headers)
 
     count = 0
-    urls: List[str] = []
+    items: List[Dict[str, Any]] = []
 
     for pr in pulls:
         number = pr.get("number")
@@ -166,7 +159,12 @@ def get_open_activity_count(owner: str, repo: str, spark_path: str, token: Optio
         for item in files:
             if item.get("filename") == spark_path:
                 count += 1
-                urls.append(pr.get("html_url"))
+                items.append({
+                    "type": "pr",
+                    "url": pr.get("html_url"),
+                    "number": pr.get("number"),
+                    "user": (pr.get("user") or {}).get("login"),
+                })
                 break
 
     # 2. Fetch Issues (Proposals)
@@ -178,15 +176,20 @@ def get_open_activity_count(owner: str, repo: str, spark_path: str, token: Optio
     for issue in all_issues:
         if issue.get("pull_request"):
             continue
-        
+
         title = issue.get("title", "").lower()
         body = issue.get("body", "").lower() if issue.get("body") else ""
-        
+
         if spark_name.lower() in title or spark_name.lower() in body:
             count += 1
-            urls.append(issue.get("html_url"))
+            items.append({
+                "type": "issue",
+                "url": issue.get("html_url"),
+                "number": issue.get("number"),
+                "user": (issue.get("user") or {}).get("login"),
+            })
 
-    return {"count": count, "urls": urls, "can_push": can_push}
+    return {"count": count, "items": items, "can_push": can_push}
 
 
 def search_for_spark_files(owner: str, repo: str) -> List[Dict[str, Any]]:
@@ -201,7 +204,8 @@ def get_last_commit_author(owner: str, repo: str, path: str, branch: str, header
     """Fetch the last commit for a given file and return author info.
 
     Uses the GitHub commits API filtered by path and branch, limited to 1 result.
-    Returns a dict with keys 'login' and 'name' when available, otherwise None.
+    Returns a dict with keys 'login', 'name', and 'date' (ISO 8601) when available,
+    otherwise None.
     """
     commits_url = (
         f"https://api.github.com/repos/{owner}/{repo}/commits"
@@ -219,8 +223,18 @@ def get_last_commit_author(owner: str, repo: str, path: str, branch: str, header
         commit_author = (commit.get("commit") or {}).get("author", {})
         login = author_user.get("login")
         name = commit_author.get("name")
-        if login or name:
-            return {"login": login, "name": name}
+        date = commit_author.get("date")
+
+        result: Dict[str, Optional[str]] = {}
+        if login:
+            result["login"] = login
+        if name:
+            result["name"] = name
+        if date:
+            result["date"] = date
+
+        if result:
+            return result
 
     return None
 
@@ -332,45 +346,7 @@ def get_sparks():
             return jsonify(stale_data)
         return jsonify({"error": str(err), "files": []}), 502
 
-
-@app.post("/api/mission")
-def run_mission():
-    payload = request.get_json(silent=True) or {}
-    content = payload.get("content")
-    if not content:
-        return jsonify({"error": "content is required"}), 400
-
-    result = evaluate_spark_mission(content)
-    return jsonify(result)
-
-
-@app.post("/api/mission/file")
-def run_mission_file():
-    payload = request.get_json(silent=True) or {}
-    repo_input = payload.get("repo")
-    spark_path = payload.get("path")
-    branch = payload.get("branch") or "main"
-
-    if not repo_input or not spark_path:
-        return jsonify({"error": "repo and path are required"}), 400
-
-    try:
-        parsed = parse_repo_url(repo_input)
-    except ValueError as err:
-        return jsonify({"error": str(err)}), 400
-
-    owner = parsed["owner"]
-    repo = parsed["repo"]
-    headers = build_github_headers()
-    content_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{spark_path}"
-
-    try:
-        content = fetch_text(content_url, headers)
-    except Exception as err:
-        return jsonify({"error": f"Failed to fetch spark content: {err}"}), 502
-
-    result = evaluate_spark_mission(content)
-    return jsonify(result)
+## Scribe missions and /api/mission endpoints removed
 
 
 
@@ -521,10 +497,10 @@ def get_prs_for_spark():
     try:
         result = get_open_activity_count(owner, repo, spark_path, token)
         response = {
-            "count": result["count"], 
-            "urls": result["urls"], 
+            "count": result["count"],
+            "items": result["items"],
             "can_push": result["can_push"],
-            "cached": False
+            "cached": False,
         }
         pr_cache["data"][cache_key] = response
         pr_cache["timestamp"] = now

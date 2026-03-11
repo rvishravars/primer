@@ -58,6 +58,7 @@ function AppMain() {
         contributors: spark.contributors,
         proposals: spark.proposals || { 1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '', 8: '' },
         sourcePath: spark.sourcePath || spark.sourceFile || null,
+        lastCommit: spark.lastCommit || null,
       };
       setSparkData(loaded);
       setOriginalSparkData(JSON.parse(JSON.stringify(loaded)));

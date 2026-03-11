@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FileText, Zap, RefreshCw, Search, X, Globe, FolderGit2, ChevronDown, ChevronUp, GitPullRequest } from 'lucide-react';
-import { buildMissionSummary, parseSparkFile } from '../utils/sparkParser';
+import { parseSparkFile } from '../utils/sparkParser';
 import { getStoredToken, loadSparksFromGitHub, parseRepoUrl } from '../utils/github';
 import RepoInput from './RepoInput';
 import GlobalSparkSearch from './GlobalSparkSearch';
@@ -13,28 +13,21 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
   const [error, setError] = useState(null);
   const [errorType, setErrorType] = useState(null); // 'repo-not-found', 'no-sparks', 'network-error'
   // const [repoInfo, setRepoInfo] = useState(null);
-  const [missionSummary, setMissionSummary] = useState(null);
-  const [missionLoading, setMissionLoading] = useState(false);
-  const [missionError, setMissionError] = useState(null);
-  const [missionRefreshToken, setMissionRefreshToken] = useState(0);
-  const [prInfo, setPrInfo] = useState({ count: null, urls: [] });
+  // Scribe Summary (missions) removed
+  const [prInfo, setPrInfo] = useState({ count: null, items: [], urls: [] });
   const [refreshToken, setRefreshToken] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [isScribeSummaryCollapsed, setIsScribeSummaryCollapsed] = useState(true);
-  const [isSparksListCollapsed, setIsSparksListCollapsed] = useState(true);
+  const [isChallengesCollapsed, setIsChallengesCollapsed] = useState(false);
+  const [isSparksListCollapsed, setIsSparksListCollapsed] = useState(false);
   const hasRegisteredRefresh = useRef(false);
   const onPermissionChangeRef = useRef(onPermissionChange);
-  const missionContentRef = useRef(null);
-  const missionFallbackRef = useRef(null);
+  // Scribe Summary content refs removed
 
   useEffect(() => {
     onPermissionChangeRef.current = onPermissionChange;
   }, [onPermissionChange]);
 
-  useEffect(() => {
-    missionContentRef.current = selectedSpark?.rawContent || null;
-    missionFallbackRef.current = selectedSpark || null;
-  }, [selectedSpark]);
+  // Scribe Summary wiring removed
 
   // Expose refresh function to parent
   useEffect(() => {
@@ -52,7 +45,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
     return 'bg-red-600';
   };
 
-  const buildSparkEntry = useCallback((filename, content, sourcePath, lastCommitAuthorLogin) => {
+  const buildSparkEntry = useCallback((filename, content, sourcePath, lastCommit) => {
     console.log(`🛠️ Building spark entry for ${filename}, content length: ${content?.length || 0}`);
     const parsed = parseSparkFile(content);
     console.log(`✅ Parsed name for ${filename}:`, parsed.name);
@@ -60,12 +53,17 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
     parsed.sourceFile = filename;
     parsed.sourcePath = sourcePath || filename;
 
+    // Attach last commit metadata when available
+    if (lastCommit) {
+      parsed.lastCommit = lastCommit;
+    }
+
     // Derive spark owner from Git metadata when not explicitly set
     try {
       if (!parsed.contributors) parsed.contributors = {};
       // Prefer last commit author login when available from backend
-      if (!parsed.contributors.scout && lastCommitAuthorLogin) {
-        parsed.contributors.scout = lastCommitAuthorLogin;
+      if (!parsed.contributors.scout && lastCommit?.login) {
+        parsed.contributors.scout = lastCommit.login;
       } else if (!parsed.contributors.scout && repoUrl) {
         // Fallback: use repo owner
         const { owner } = parseRepoUrl(repoUrl);
@@ -82,6 +80,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
       name: parsed.name,
       file: filename,
       stability: parsed.stability,
+      lastCommit: parsed.lastCommit || null,
       data: parsed,
     };
   }, [repoUrl]);
@@ -182,7 +181,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
             file.name || file.path || 'spark',
             file.content,
             file.path,
-            file.lastCommit?.login || null,
+            file.lastCommit || null,
           )
         );
 
@@ -225,68 +224,48 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
     return nameMatch || fileMatch || contentMatch;
   });
 
+  const formatTimeAgo = (isoString) => {
+    if (!isoString) return null;
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return null;
+
+    const now = new Date();
+    let diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) diffMs = 0;
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const days = Math.floor(diffMs / dayMs);
+
+    if (days <= 0) return 'today';
+    if (days === 1) return '1 day ago';
+    if (days < 30) return `${days} days ago`;
+
+    const months = Math.floor(days / 30);
+    if (months === 1) return '1 month ago';
+    if (months < 12) return `${months} months ago`;
+
+    const years = Math.floor(months / 12);
+    const remMonths = months % 12;
+    if (remMonths === 0) {
+      return years === 1 ? '1 year ago' : `${years} years ago`;
+    }
+    const yearsPart = years === 1 ? '1 year' : `${years} years`;
+    const monthsPart = remMonths === 1 ? '1 month' : `${remMonths} months`;
+    return `${yearsPart} ${monthsPart} ago`;
+  };
+
   useEffect(() => {
     if (!selectedSpark && sparks.length > 0 && !currentSparkData) {
       onSparkSelect(sparks[0].data);
     }
   }, [sparks, selectedSpark, onSparkSelect, currentSparkData]);
 
-  useEffect(() => {
-    const missionKey = selectedSpark?.sourcePath || selectedSpark?.sourceFile || selectedSpark?.id || null;
-    const content = missionContentRef.current;
-
-    if (!missionKey || !content) {
-      setMissionSummary(null);
-      setMissionError(null);
-      setMissionLoading(false);
-      setPrInfo({ count: null, urls: [] });
-      return;
-    }
-
-    const controller = new AbortController();
-    const loadMission = async () => {
-      setMissionLoading(true);
-      setMissionError(null);
-
-      try {
-        const response = await fetch('/api/mission', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Mission request failed: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setMissionSummary({
-          status: data?.audit?.status || 'RED',
-          recommendation: data?.audit?.recommendation || 'Reject',
-          scribe_report: data?.audit?.scribe_report || 'No report available.',
-          critical_flaws: data?.audit?.critical_flaws || [],
-          merit_plan: data?.merit_plan || [],
-        });
-      } catch (err) {
-        if (err.name === 'AbortError') {
-          return;
-        }
-        setMissionError(err.message || 'Failed to run mission evaluation');
-        setMissionSummary(buildMissionSummary(missionFallbackRef.current));
-      } finally {
-        setMissionLoading(false);
-      }
-    };
-
-    loadMission();
-    return () => controller.abort();
-  }, [selectedSpark?.sourcePath, selectedSpark?.sourceFile, selectedSpark?.id, missionRefreshToken]);
+  // Scribe Summary effect removed
 
   useEffect(() => {
     const sparkPath = selectedSpark?.sourcePath;
     if (!sparkPath || !repoUrl) {
-      setPrInfo({ count: null, urls: [] });
+      setPrInfo({ count: null, items: [], urls: [] });
       return;
     }
 
@@ -302,7 +281,15 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
           throw new Error('Failed to load PR status');
         }
         const data = await response.json();
-        setPrInfo({ count: data.count ?? 0, urls: data.urls || [] });
+        const count = data.count ?? 0;
+
+        // Prefer structured items when available; otherwise fall back to legacy urls array.
+        let items = Array.isArray(data.items) ? data.items : [];
+        if ((!items || items.length === 0) && Array.isArray(data.urls)) {
+          items = data.urls.map((url) => ({ url }));
+        }
+
+        setPrInfo({ count, items, urls: data.urls || [] });
 
         // Notify parent about push permissions
         onPermissionChangeRef.current?.(data.can_push ?? false);
@@ -310,7 +297,7 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
         if (err.name === 'AbortError') {
           return;
         }
-        setPrInfo({ count: null, urls: [] });
+        setPrInfo({ count: null, items: [], urls: [] });
       }
     };
 
@@ -389,28 +376,23 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            {missionSummary && (
-              <div className="mb-4 rounded-lg border theme-border theme-card-soft">
+            {/* Updates section: open PRs / proposals for this spark */}
+            {prInfo.count > 0 && (
+              <div className="rounded-lg border theme-border theme-card-soft mb-3">
                 <div
-                  onClick={() => setIsScribeSummaryCollapsed(!isScribeSummaryCollapsed)}
+                  onClick={() => setIsChallengesCollapsed(!isChallengesCollapsed)}
                   className="w-full flex items-center justify-between p-3 hover:bg-gray-700/30 transition-colors cursor-pointer"
                 >
-                  <p className="text-xs uppercase tracking-wider theme-muted font-semibold">
-                    Scribe Summary
-                  </p>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMissionRefreshToken((value) => value + 1);
-                      }}
-                      disabled={missionLoading}
-                      className="theme-muted-hover transition-colors disabled:opacity-50"
-                      title="Re-run mission"
-                    >
-                      <RefreshCw className={`h-4 w-4 ${missionLoading ? 'animate-spin' : ''}`} />
-                    </button>
-                    {isScribeSummaryCollapsed ? (
+                    <h3 className="text-xs font-semibold uppercase tracking-wider theme-muted">
+                      Updates
+                      <span className="theme-text text-xs font-normal ml-1">
+                        ({prInfo.count})
+                      </span>
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isChallengesCollapsed ? (
                       <ChevronDown className="h-4 w-4 theme-muted" />
                     ) : (
                       <ChevronUp className="h-4 w-4 theme-muted" />
@@ -418,94 +400,24 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
                   </div>
                 </div>
 
-                {!isScribeSummaryCollapsed && (
-                  <div className="px-3 pb-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm mt-1">{missionSummary.scribe_report}</p>
-                        {missionLoading && (
-                          <p className="text-xs theme-subtle mt-1">Running mission evaluation...</p>
-                        )}
-                        {missionError && (
-                          <p className="text-xs text-red-300 mt-1">{missionError}</p>
-                        )}
-                      </div>
-                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${getAuditBadge(missionSummary.status)}`}>
-                        {missionSummary.status}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 space-y-2">
-                      <div className="grid grid-cols-2 gap-4 text-xs theme-subtle">
-                        <span>
-                          Recommendation:{' '}
-                          <span className="theme-text font-semibold">{missionSummary.recommendation}</span>
+                {!isChallengesCollapsed && (
+                  <div className="px-3 pb-3 space-y-2">
+                    {prInfo.items?.map((item, index) => (
+                      <a
+                        key={item.url || index}
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 text-xs theme-link hover:underline"
+                      >
+                        <GitPullRequest className="h-3 w-3 text-spark-500" />
+                        <span className="truncate">
+                          {item.type === 'issue' ? 'Issue' : 'PR'}
+                          {item.number ? ` #${item.number}` : ''}
+                          {item.user ? ` by @${item.user}` : ''}
                         </span>
-                        {selectedSpark && (
-                          <span className="text-right">
-                            Stability:{' '}
-                            <span className="theme-text font-semibold">{selectedSpark.stability}/3</span>
-                          </span>
-                        )}
-                      </div>
-                      {prInfo.count !== null && prInfo.count > 0 && (
-                        <div className="mt-3 border-t border-gray-700/50 pt-3">
-                          <p className="text-[10px] uppercase tracking-wider theme-muted font-semibold mb-2">
-                            Evolution Activity ({prInfo.count})
-                          </p>
-                          <div className="space-y-1.5">
-                            {prInfo.urls.map((url, idx) => {
-                              const isPR = url.includes('/pull/');
-                              const number = url.split('/').pop();
-                              return (
-                                <a
-                                  key={idx}
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`flex items-center justify-between p-2 rounded bg-black/20 hover:bg-black/40 transition-colors text-[10px] border border-white/5`}
-                                >
-                                  <span className="truncate flex-1 mr-2 flex items-center gap-1.5">
-                                    {isPR ? (
-                                      <GitPullRequest className="h-3 w-3 text-spark-400" />
-                                    ) : (
-                                      <Zap className="h-3 w-3 text-design-400" />
-                                    )}
-                                    <span>{isPR ? `PR #${number}` : `Proposal #${number}`}</span>
-                                  </span>
-                                  <span className="theme-muted">View →</span>
-                                </a>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {missionSummary.critical_flaws.length > 0 && (
-                      <div className="mt-3 text-xs text-red-300">
-                        <p className="font-semibold text-red-400">Critical Flaws</p>
-                        <ul className="mt-1 space-y-1">
-                          {missionSummary.critical_flaws.map((flaw) => (
-                            <li key={flaw}>• {flaw}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {missionSummary.merit_plan.length > 0 && (
-                      <div className="mt-3 text-xs theme-subtle">
-                        <p className="font-semibold theme-text mb-2">Leadership Board</p>
-                        <div className="flex flex-wrap gap-2">
-                          {missionSummary.merit_plan.slice(0, 3).map((entry) => (
-                            <span key={`${entry.handle}-${entry.role}`} className="inline-flex items-center gap-1 rounded-full bg-logic-600/20 px-2 py-1 text-xs">
-                              <span className="font-semibold">{entry.handle.replace('@', '')}</span>
-                              <span className="text-logic-300">{entry.reward}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                      </a>
+                    ))}
                   </div>
                 )}
               </div>
@@ -623,6 +535,11 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
                               <div>
                                 <h4 className="font-semibold text-sm">{spark.name}</h4>
                                 <p className="text-xs theme-muted mt-1">{spark.file}</p>
+                                {spark.data?.lastCommit?.date && (
+                                  <p className="text-[11px] theme-subtle mt-0.5">
+                                    Updated {formatTimeAgo(spark.data.lastCommit.date)}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </div>

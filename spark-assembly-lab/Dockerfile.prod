@@ -29,7 +29,6 @@ RUN pip install --no-cache-dir -r server_py/requirements.txt
 # Copy built UI and backend
 COPY --from=build-stage /app/spark-assembly-lab/dist ./dist
 COPY server_py ./server_py
-COPY scribe ./scribe
 
 EXPOSE 8080
 

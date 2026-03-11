@@ -357,8 +357,14 @@ export const fetchLastCommitAuthor = async (owner, repo, filepath, branch = 'mai
       const commitAuthor = (commit.commit || {}).author || {};
       const login = authorUser.login || null;
       const name = commitAuthor.name || null;
-      if (login || name) {
-        return { login, name };
+      const date = commitAuthor.date || null;
+
+      const result = {};
+      if (login) result.login = login;
+      if (name) result.name = name;
+      if (date) result.date = date;
+      if (Object.keys(result).length > 0) {
+        return result;
       }
     }
 

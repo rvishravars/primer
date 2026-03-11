@@ -53,7 +53,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   const [editStatus, setEditStatus] = useState(null);
   const [editingSection, setEditingSection] = useState(null);
   const [sectionDraft, setSectionDraft] = useState('');
-  const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  const [toolbarExpanded, setToolbarExpanded] = useState(true);
   const [aiApplied, setAiApplied] = useState(false);
   const [contributors, setContributors] = useState([]);
   const [contributorsLoading, setContributorsLoading] = useState(false);
@@ -211,18 +211,53 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
     );
   };
 
-  const calculateStability = () => {
-    // Count how many active sections have meaningful content
+  const calculateCompleteness = () => {
     const sections = sparkData.sections || {};
-    const activeSections = sparkData.activeSections || [1];
-    return activeSections.filter(n => (sections[n] || '').trim().length > 20).length;
+    const total = 8;
+    let filled = 0;
+    for (let i = 1; i <= total; i += 1) {
+      if ((sections[i] || '').trim().length > 0) {
+        filled += 1;
+      }
+    }
+    return { filled, total };
   };
 
-  const stability = calculateStability();
+  const completeness = calculateCompleteness();
   const validation = validateSparkData(sparkData);
   const isDirty = originalSparkData
     ? JSON.stringify(sparkData) !== JSON.stringify(originalSparkData)
     : true;
+
+  const formatTimeAgo = (isoString) => {
+    if (!isoString) return null;
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return null;
+
+    const now = new Date();
+    let diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) diffMs = 0;
+
+    const dayMs = 24 * 60 * 60 * 1000;
+    const days = Math.floor(diffMs / dayMs);
+
+    if (days <= 0) return 'today';
+    if (days === 1) return '1 day ago';
+    if (days < 30) return `${days} days ago`;
+
+    const months = Math.floor(days / 30);
+    if (months === 1) return '1 month ago';
+    if (months < 12) return `${months} months ago`;
+
+    const years = Math.floor(months / 12);
+    const remMonths = months % 12;
+    if (remMonths === 0) {
+      return years === 1 ? '1 year ago' : `${years} years ago`;
+    }
+    const yearsPart = years === 1 ? '1 year' : `${years} years`;
+    const monthsPart = remMonths === 1 ? '1 month' : `${remMonths} months`;
+    return `${yearsPart} ${monthsPart} ago`;
+  };
 
   const handleEditDone = () => {
     const result = validateSparkData(sparkData);
@@ -465,9 +500,14 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
             />
             <ContributorsList contributors={contributors} loading={contributorsLoading} />
             <div className="mt-1 flex items-center space-x-2">
+              {sparkData?.lastCommit?.date && (
+                <span className="inline-flex items-center rounded-full px-2 sm:px-3 py-0.5 sm:py-1 text-[11px] font-medium bg-gray-700/60 text-gray-200/90">
+                  Updated {formatTimeAgo(sparkData.lastCommit.date)}
+                </span>
+              )}
               {(() => {
-                const total = (sparkData.activeSections || [1]).length;
-                const ratio = stability / total;
+                const total = completeness.total;
+                const ratio = total === 0 ? 0 : completeness.filled / total;
                 const color = ratio === 0
                   ? 'bg-red-600'
                   : ratio < 0.4
@@ -477,7 +517,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                       : 'bg-logic-600';
                 return (
                   <span className={`inline-flex items-center rounded-full px-2 sm:px-3 py-0.5 sm:py-1 text-xs font-semibold ${color}`}>
-                    {stability}/{total} Stable
+                    Completeness {completeness.filled}/{total}
                   </span>
                 );
               })()}
@@ -856,16 +896,8 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                 <div className="p-8 space-y-6">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between text-xs font-mono font-bold uppercase tracking-widest">
-                      <span className="text-white/40">Status</span>
-                      <span className="text-logic-400">Ready to Ship</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs font-mono font-bold uppercase tracking-widest">
                       <span className="text-white/40">Integrity Check</span>
                       <span className="text-logic-400">PASSED</span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs font-mono font-bold uppercase tracking-widest">
-                      <span className="text-white/40">Merit Stake</span>
-                      <span className="text-logic-400">Verified</span>
                     </div>
                   </div>
 
