@@ -110,7 +110,7 @@ core_claim: "<One-sentence central claim or shift>"
 | 2 | **Hypothesis Formalization** | Structured | ✅ Before Design review |
 | 3 | **Simulation / Modeling Plan** | Modeled | ⬜ Recommended |
 | 4 | **Evaluation Strategy** | Modeled | ⬜ Recommended |
-| 5 | **Feedback & Critique** | Any | ⬜ Encouraged |
+| 5 | **Feedback & Critique** | Any | ⬜ Encouraged (primary collaboration surface for non-owners) |
 | 6 | **Results (When Available)** | Validated | ⬜ Required for Validated status |
 | 7 | **Revision Notes** | Any | ⬜ Auto-tracked |
 | 8 | **Next Actions** | Any | ⬜ Encouraged |

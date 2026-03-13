@@ -255,7 +255,7 @@ def fetch_sparks_from_github(owner: str, repo: str, branch: str = "main", search
         except urllib.error.HTTPError as err:
             if err.code == 404:
                 raise RuntimeError(
-                    f"Repository '{owner}/{repo}' not found or the '{search_path}' directory doesn't exist"
+                    f"Repository '{owner}/{repo}' or branch '{branch}' not found, or no spark files could be discovered."
                 )
             if err.code == 403:
                 raise RuntimeError("GitHub API rate limit exceeded. Please try again later or add a GITHUB_TOKEN")
@@ -310,7 +310,9 @@ def get_sparks():
     now = int(time.time() * 1000)
     repo_input = request.args.get("repo") or get_env("SPARK_REPO", "rvishravars/primer")
     branch = request.args.get("branch") or "main"
-    search_path = request.args.get("path") or "sparks"
+    # Default to searching the whole repo; 'search_path' is kept only for
+    # backward compatibility but no longer defaults to 'sparks'.
+    search_path = request.args.get("path") or ""
 
     try:
         parsed = parse_repo_url(repo_input)

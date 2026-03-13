@@ -9,6 +9,7 @@ import 'katex/dist/katex.min.css';
 import AIWorkbenchModal from './AIWorkbenchModal';
 import PRTracker from './PRTracker';
 import CommentsPanel from './CommentsPanel';
+import FeedbackIssueLinks from './FeedbackIssueLinks';
 import { generateSparkMarkdown, parseSparkFile, validateSparkData } from '../utils/sparkParser';
 import { useToast } from '../utils/ToastContext';
 import { getStoredToken, getStoredUserInfo, parseRepoUrl } from '../utils/github';
@@ -25,24 +26,8 @@ const ENHANCED_SECTIONS_CONFIG = {
   8: { title: '8. Next Actions', description: 'Concrete steps forward', color: 'spark' }
 };
 
-const buildMarkdownDraftStorageKey = (repoUrl, draftId) => {
-  let repoKey = 'local';
-  try {
-    if (repoUrl) {
-      const { owner, repo } = parseRepoUrl(repoUrl);
-      repoKey = `${owner}/${repo}`;
-    }
-  } catch (e) {
-    repoKey = repoUrl || 'local';
-  }
-
-  const safeDraftId = draftId || 'untitled';
-  return `spark_lab_markdown_draft:${repoKey}:${safeDraftId}`;
-};
-
 export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, originalSparkData, onResetSpark, isReadOnly, onPRCreated, canPush = true, onNewSpark, viewMode = 'components' }) {
   const [showPreview, setShowPreview] = useState(false);
-  const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
   const [showPRTracker, setShowPRTracker] = useState(false);
   const [showCommentsPanel, setShowCommentsPanel] = useState(false);
@@ -57,10 +42,11 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   const [aiApplied, setAiApplied] = useState(false);
   const [contributors, setContributors] = useState([]);
   const [contributorsLoading, setContributorsLoading] = useState(false);
-  const [markdownDraft, setMarkdownDraft] = useState('');
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackDraft, setFeedbackDraft] = useState('');
+  const [hasHighlightedFeedback, setHasHighlightedFeedback] = useState(false);
+  const [highlightPropose, setHighlightPropose] = useState(false);
   const sparkDataRef = useRef(sparkData);
-  const markdownDraftId = originalSparkData?.sourcePath || sparkData?.sourcePath || sparkData?.name || 'untitled';
-  const markdownDraftStorageKey = buildMarkdownDraftStorageKey(repoUrl, markdownDraftId);
   const toast = useToast();
   const user = getStoredUserInfo();
   const isOwner = user && (() => {
@@ -75,6 +61,22 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       user.login?.toLowerCase() === repoOwner.toLowerCase()
     );
   })();
+  const canAddFeedback = !!user && !isOwner;
+
+  // On first load for non-owners, gently surface Feedback & Critique alongside the narrative
+  useEffect(() => {
+    if (!canAddFeedback || hasHighlightedFeedback || !sparkData) return;
+    const active = sparkData.activeSections || [1];
+    if (!active.includes(5)) {
+      onSparkUpdate({
+        ...sparkData,
+        activeSections: [1, 5],
+      });
+    }
+    setHasHighlightedFeedback(true);
+    // We intentionally include only a subset of deps to avoid re-running when sparkData changes shape.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAddFeedback, hasHighlightedFeedback, onSparkUpdate]);
 
   useEffect(() => {
     sparkDataRef.current = sparkData;
@@ -85,66 +87,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
     setShowPreview(false);
     setShowPRTracker(false);
     setShowCommentsPanel(false);
-    if (viewMode === 'markdown') {
-      setShowMarkdownPreview(false);
-    }
   }, [viewMode]);
-
-  useEffect(() => {
-    if (viewMode !== 'markdown') return;
-
-    try {
-      const stored = localStorage.getItem(markdownDraftStorageKey);
-      if (stored !== null) {
-        setMarkdownDraft(stored);
-      } else {
-        setMarkdownDraft(generateSparkMarkdown(sparkDataRef.current));
-      }
-    } catch (e) {
-      setMarkdownDraft(generateSparkMarkdown(sparkDataRef.current));
-    }
-
-    setShowMarkdownPreview(false);
-  }, [viewMode, markdownDraftStorageKey]);
-
-  useEffect(() => {
-    if (viewMode !== 'markdown') return;
-
-    const timeoutId = window.setTimeout(() => {
-      try {
-        localStorage.setItem(markdownDraftStorageKey, markdownDraft);
-      } catch (e) {
-        // Best-effort persistence.
-      }
-    }, 300);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [markdownDraft, viewMode, markdownDraftStorageKey]);
-
-  useEffect(() => {
-    if (viewMode !== 'markdown') return;
-    if (!markdownDraft) return;
-
-    const timeoutId = window.setTimeout(() => {
-      try {
-        const parsed = parseSparkFile(markdownDraft);
-        const current = sparkDataRef.current;
-        if (!current) return;
-
-        onSparkUpdate({
-          ...current,
-          name: parsed?.name || current.name,
-          markedForDeletion: typeof parsed?.markedForDeletion === 'boolean' ? parsed.markedForDeletion : current.markedForDeletion,
-          sections: parsed?.sections || current.sections,
-          proposals: parsed?.proposals || current.proposals,
-        });
-      } catch (e) {
-        // Best-effort parsing; keep draft editable even if parsing fails.
-      }
-    }, 500);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [markdownDraft, onSparkUpdate, viewMode]);
 
   // Load contributors for the selected spark
   useEffect(() => {
@@ -310,12 +253,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       };
       onSparkUpdate(updated);
       // Keep markdown view in sync if user switches modes later.
-      try {
-        const storageKey = buildMarkdownDraftStorageKey(repoUrl, markdownDraftId);
-        localStorage.setItem(storageKey, markdown);
-      } catch (e) {
-        // Best-effort persistence.
-      }
+      // No longer syncing a separate markdown draft; edits flow through structured sections.
       setAiApplied(true);
       toast.success('AI workbench suggestion applied. Review and sync when ready.');
     } catch (e) {
@@ -587,8 +525,8 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitting || isReadOnly || !isDirty}
-                className={`flex items-center justify-center rounded-lg bg-logic-600 p-2 sm:p-2.5 text-xs sm:text-sm font-semibold hover:bg-logic-700 transition-colors disabled:opacity-60 flex-shrink-0 ${isReadOnly || !isDirty ? 'cursor-not-allowed grayscale' : ''}`}
-                title={canPush ? 'Submit changes' : 'Propose changes'}
+                className={`flex items-center justify-center rounded-lg bg-logic-600 p-2 sm:p-2.5 text-xs sm:text-sm font-semibold hover:bg-logic-700 transition-colors disabled:opacity-60 flex-shrink-0 ${isReadOnly || !isDirty ? 'cursor-not-allowed grayscale' : ''} ${highlightPropose && !canPush ? 'animate-pulse ring-2 ring-logic-300 ring-offset-2 ring-offset-black' : ''}`}
+                title={canPush ? 'Submit changes' : (highlightPropose ? 'Propose changes (next step after feedback)' : 'Propose changes')}
                 aria-label={canPush ? 'Submit changes' : 'Propose changes'}
               >
                 <GitPullRequest className="h-4 w-4" />
@@ -659,10 +597,10 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
 
               <button
                 onClick={handleDeleteRequest}
-                disabled={isSubmitting || isReadOnly || !originalSparkData}
+                disabled={isSubmitting || isReadOnly || !originalSparkData || !isOwner}
                 className="hidden lg:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 text-red-400 hover:bg-red-500/10"
-                title="Delete spark"
-                aria-label="Delete spark"
+                title="Delete spark (owners only)"
+                aria-label="Delete spark (owners only)"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -674,6 +612,23 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       {isReadOnly && (
         <div className="mx-4 sm:mx-6 mt-4 rounded-lg border border-design-500/40 bg-design-500/10 px-3 py-2 text-xs sm:text-sm text-design-100">
           Login to edit or propose changes to this spark.
+        </div>
+      )}
+
+      {!isReadOnly && canAddFeedback && (
+        <div className="mx-4 sm:mx-6 mt-4 rounded-lg border border-spark-500/50 bg-spark-500/10 px-3 py-2 text-xs sm:text-sm text-spark-100 flex items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold">Help advance this spark with feedback.</p>
+            <p className="mt-0.5 text-[11px] sm:text-xs opacity-80">
+              Start in <span className="font-semibold">Section 5 – Feedback &amp; Critique</span> to share critiques or counter-hypotheses.
+            </p>
+          </div>
+          <button
+            onClick={() => onSparkUpdate({ ...sparkData, activeSections: [1, 5] })}
+            className="flex-shrink-0 rounded-full bg-spark-500 hover:bg-spark-400 text-black text-[11px] sm:text-xs font-semibold px-3 py-1.5 shadow-[0_0_12px_rgba(244,114,182,0.6)]"
+          >
+            Jump to Feedback
+          </button>
         </div>
       )}
 
@@ -689,43 +644,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
         </div>
       )}
 
-      {viewMode === 'markdown' ? (
-        <div className="flex-1 overflow-y-auto">
-          <div className="h-full flex flex-col p-4 sm:p-6 gap-4 sm:gap-6">
-            <div className="flex-1 flex flex-col rounded-xl border-2 border-white/10 theme-panel-soft min-w-0">
-              <div className="px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl bg-white/5 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="text-lg sm:text-xl font-bold theme-muted">Markdown</h2>
-                  <p className="text-xs sm:text-sm mt-1 theme-subtle">Edits are saved locally in this browser</p>
-                </div>
-                <button
-                  onClick={() => setShowMarkdownPreview(!showMarkdownPreview)}
-                  className="flex items-center space-x-2 rounded-lg theme-button px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap flex-shrink-0"
-                >
-                  <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
-                  <span>{showMarkdownPreview ? 'Edit' : 'Preview'}</span>
-                </button>
-              </div>
-
-              <div className="flex-1 p-3 sm:p-4 overflow-hidden">
-                {showMarkdownPreview ? (
-                  <div className="h-full overflow-y-auto">
-                    <MarkdownPreview markdown={markdownDraft || ''} />
-                  </div>
-                ) : (
-                  <textarea
-                    value={markdownDraft}
-                    onChange={(e) => setMarkdownDraft(e.target.value)}
-                    readOnly={isReadOnly}
-                    className={`w-full h-full resize-none theme-input rounded border p-3 sm:p-4 text-xs sm:text-sm font-mono bg-black/10 overflow-y-auto ${isReadOnly ? 'cursor-not-allowed opacity-80' : ''}`}
-                    spellCheck={false}
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : showPreview ? (
+      {showPreview ? (
         <MarkdownPreview markdown={generateSparkMarkdown(sparkData)} />
       ) : showPRTracker ? (
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
@@ -766,10 +685,14 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                       </div>
                     </div>
                     <div className="mt-2">
-                      <button onClick={() => openSectionEditor(1)} disabled={isReadOnly}
-                        className={`text-xs text-${config.color}-400 hover:text-${config.color}-300 disabled:opacity-50 disabled:cursor-not-allowed`}>
-                        {!isReadOnly && <span>{isOwner ? 'Edit' : 'Add'}</span>}
-                      </button>
+                      {isOwner && !isReadOnly && (
+                        <button
+                          onClick={() => openSectionEditor(1)}
+                          className={`text-xs text-${config.color}-400 hover:text-${config.color}-300`}
+                        >
+                          Edit
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -807,10 +730,29 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                         </div>
                       </div>
                       <div className="mt-2">
-                        <button onClick={() => openSectionEditor(rightSectionNum)} disabled={isReadOnly}
-                          className={`text-xs text-${config.color}-400 hover:text-${config.color}-300 disabled:opacity-50 disabled:cursor-not-allowed`}>
-                          {!isReadOnly && <span>{isOwner ? 'Edit' : 'Add'}</span>}
-                        </button>
+                        {rightSectionNum === 5 && canAddFeedback && !isReadOnly ? (
+                          <button
+                            onClick={() => setShowFeedbackModal(true)}
+                            className={`text-xs text-${config.color}-400 hover:text-${config.color}-300`}
+                          >
+                            Add feedback / critique
+                          </button>
+                        ) : (
+                          isOwner && !isReadOnly && (
+                            <button
+                              onClick={() => openSectionEditor(rightSectionNum)}
+                              className={`text-xs text-${config.color}-400 hover:text-${config.color}-300`}
+                            >
+                              Edit
+                            </button>
+                          )
+                        )}
+                        {rightSectionNum === 5 && (
+                          <FeedbackIssueLinks
+                            repoUrl={repoUrl}
+                            sparkPath={originalSparkData?.sourcePath || sparkData.sourcePath}
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -827,7 +769,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                               className={`text-xs px-2 py-1 rounded border transition-all ${parseInt(num) === rightSectionNum
                                 ? `border-${cfg.color}-500 bg-${cfg.color}-500/20 text-${cfg.color}-300`
                                 : 'border-white/10 hover:border-white/30 theme-muted hover:theme-text'
-                                }`}
+                                } ${parseInt(num) === 5 && canAddFeedback ? 'animate-pulse border-spark-400 text-spark-200 bg-spark-500/10' : ''}`}
                             >
                               {num}. {cfg.title.split('. ')[1]}
                             </button>
@@ -853,7 +795,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                           <button
                             key={num}
                             onClick={() => onSparkUpdate({ ...sparkData, activeSections: [1, parseInt(num)] })}
-                            className={`p-3 rounded-lg border-2 border-${cfg.color}-500/30 hover:border-${cfg.color}-500 hover:bg-${cfg.color}-500/10 transition-all text-left`}
+                            className={`p-3 rounded-lg border-2 border-${cfg.color}-500/30 hover:border-${cfg.color}-500 hover:bg-${cfg.color}-500/10 transition-all text-left ${parseInt(num) === 5 && canAddFeedback ? 'animate-pulse border-spark-400 bg-spark-500/10' : ''}`}
                           >
                             <p className={`text-sm font-semibold text-${cfg.color}-400`}>{cfg.title}</p>
                             <p className="text-xs theme-subtle mt-0.5">{cfg.description}</p>
@@ -1053,6 +995,80 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                       className="px-4 py-2 bg-design-600 hover:bg-design-700 rounded-lg font-semibold transition-colors"
                     >
                       Done
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Feedback & Critique append modal for non-owners */}
+          {showFeedbackModal && (
+            <div className="fixed inset-0 z-50 theme-overlay backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+              <div className="theme-panel rounded-xl border-2 border-spark-600 w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl">
+                <div className="bg-spark-600 px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl flex items-center justify-between">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-base sm:text-xl font-bold truncate">Add Feedback &amp; Critique</h2>
+                    <p className="text-xs sm:text-sm opacity-90 truncate">Your note will be appended to the Feedback &amp; Critique section.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowFeedbackModal(false)}
+                    className="p-1.5 sm:p-2 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
+                    title="Close"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-3 sm:p-6">
+                  <textarea
+                    value={feedbackDraft}
+                    onChange={(e) => setFeedbackDraft(e.target.value)}
+                    className="w-full h-full theme-input rounded border p-3 sm:p-4 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-spark-500 font-mono resize-none min-h-[260px]"
+                    placeholder="Share specific feedback, critique, or a counter-hypothesis."
+                    autoFocus
+                  />
+                </div>
+
+                <div className="px-3 sm:px-6 py-3 sm:py-4 border-t theme-border flex justify-between items-center">
+                  <div className="text-xs sm:text-sm theme-muted">{feedbackDraft.length} characters</div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => {
+                        setFeedbackDraft('');
+                        setShowFeedbackModal(false);
+                      }}
+                      className="px-4 py-2 theme-button rounded-lg font-semibold transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!feedbackDraft.trim()) {
+                          return;
+                        }
+                        const existing = sparkData.sections?.[5] || '';
+                        const author = user?.login ? `@${user.login}` : 'Anonymous';
+                        const date = new Date().toISOString().split('T')[0];
+                        const block = `\n\n---\n\n### Feedback from ${author} (${date})\n\n${feedbackDraft.trim()}\n`;
+                        const updated = {
+                          ...sparkData,
+                          sections: {
+                            ...(sparkData.sections || {}),
+                            5: `${existing}${block}`.trimStart(),
+                          },
+                        };
+                        onSparkUpdate(updated);
+                        setFeedbackDraft('');
+                        setShowFeedbackModal(false);
+                        if (canAddFeedback) {
+                          setHighlightPropose(true);
+                        }
+                        handleEditDone();
+                      }}
+                      className="px-4 py-2 bg-spark-600 hover:bg-spark-700 rounded-lg font-semibold transition-colors"
+                    >
+                      Append Feedback
                     </button>
                   </div>
                 </div>

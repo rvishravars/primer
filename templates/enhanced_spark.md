@@ -44,7 +44,7 @@
 ---
 
 # 5. Feedback & Critique
-<!-- Document structured critique. -->
+<!-- Document structured critique. This is the primary collaboration surface for non-owners; append feedback, critiques, and counter-hypotheses here. -->
 
 ## Internal Critique
 - Hidden assumptions:
@@ -86,7 +86,7 @@
 ---
 
 # 9. Community Proposals
-<!-- Non-owner contributions section. Community members can propose improvements to sections. -->
+<!-- Owner-curated summary of accepted proposals and key decisions. Individual proposals are submitted as GitHub issues linked to this spark. -->
 
 ## Proposed Changes to Section 1 (Spark Narrative)
 <!-- Describe proposed improvements to the core story or narrative. -->

@@ -118,8 +118,8 @@ export default function SparkSelector({ selectedSpark, onSparkSelect, repoUrl, b
         return;
       }
 
-      // Load sparks directly from GitHub
-      const result = await loadSparksFromGitHub(repoUrl, branch || 'main', 'sparks');
+      // Load sparks directly from GitHub (searches the whole repo for .spark.md files)
+      const result = await loadSparksFromGitHub(repoUrl, branch || 'main');
 
       if (!result.success) {
         // Handle errors
