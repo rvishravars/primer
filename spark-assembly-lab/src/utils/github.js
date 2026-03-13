@@ -212,26 +212,6 @@ const fetchGitHubJson = async (url) => {
   return await fetchJson(url, { headers: buildGitHubHeaders({ noAuth: true }) });
 };
 
-const checkRepoAccessible = async (owner, repo) => {
-  const url = `https://api.github.com/repos/${owner}/${repo}`;
-  const { response } = await fetchGitHubJson(url);
-  if (response.status === 403) {
-    throw new Error('GitHub API rate limit exceeded. Please add a GitHub token or try again later.');
-  }
-  return response.ok;
-};
-
-const checkBranchExists = async (owner, repo, branch) => {
-  if (!branch) return true;
-  const url = `https://api.github.com/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`;
-  const { response } = await fetchGitHubJson(url);
-  if (response.status === 403) {
-    throw new Error('GitHub API rate limit exceeded. Please add a GitHub token or try again later.');
-  }
-  if (response.status === 404) return false;
-  return response.ok;
-};
-
 /**
  * Search for .spark.md files in a repository
  */

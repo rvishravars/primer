@@ -12,7 +12,6 @@ import { ENHANCED_SPARK_TEMPLATE } from './utils/templates';
 function AppMain() {
   console.log('🎯 App component rendering!');
   const [theme, setTheme] = useState(() => localStorage.getItem('sparkTheme') || 'studio');
-  const [viewMode, setViewMode] = useState('components'); // 'components' | 'markdown'
   const [selectedSpark, setSelectedSpark] = useState(null);
   const [repoUrl, setRepoUrl] = useState(() => localStorage.getItem('sparkRepoUrl') || 'https://github.com/rvishravars/primer-sparks');
   const [branch, setBranch] = useState(() => localStorage.getItem('sparkBranch') || 'main');
@@ -245,7 +244,7 @@ function AppMain() {
               onPRCreated={() => prRefreshCallback?.()}
               canPush={canPush}
               onNewSpark={handleNewSpark}
-              viewMode={viewMode}
+                viewMode="components"
             />
           ) : (
             <div className="flex h-full items-center justify-center p-4">
