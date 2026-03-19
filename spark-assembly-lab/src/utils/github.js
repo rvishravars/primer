@@ -371,6 +371,8 @@ export const loadSparksFromGitHub = async (repoInput, branch = 'main') => {
 
     // 1. Prefer code search across the whole repo so sparks can
     //    live anywhere, not just under a specific directory.
+    //    GitHub code search is effectively branch-agnostic and usually
+    //    reflects the default branch only.
     try {
       searchItems = await searchSparkFiles(owner, repo);
     } catch (searchErr) {
@@ -378,15 +380,15 @@ export const loadSparksFromGitHub = async (repoInput, branch = 'main') => {
       console.warn('Search failed:', searchErr);
     }
 
-    // 2. If search is empty or unavailable, fall back to a recursive
-    //    scan of the entire repo tree for .spark.md files.
-    if (!Array.isArray(searchItems) || searchItems.length === 0) {
-      try {
-        dirItems = await listAllSparkFiles(owner, repo, branch);
-      } catch (listErr) {
-        dirError = listErr;
-        console.warn('Recursive listing failed:', listErr);
-      }
+    // 2. Always run a branch-aware recursive scan of the repo tree for
+    //    .spark.md files. This ensures sparks that only exist on the
+    //    currently selected branch are discovered even if they are not
+    //    present on the default branch (and thus not returned by code search).
+    try {
+      dirItems = await listAllSparkFiles(owner, repo, branch);
+    } catch (listErr) {
+      dirError = listErr;
+      console.warn('Recursive listing failed:', listErr);
     }
 
     const combinedItems = [];
@@ -402,8 +404,8 @@ export const loadSparksFromGitHub = async (repoInput, branch = 'main') => {
     dirItems.forEach(addItem);
 
     if (combinedItems.length === 0) {
-      if (searchError) throw searchError;
       if (dirError) throw dirError;
+      if (searchError) throw searchError;
       return {
         success: true,
         owner,
