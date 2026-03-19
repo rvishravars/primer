@@ -1,4 +1,4 @@
-import { Boxes, Github, Menu } from 'lucide-react';
+import { Boxes, Github, Menu, Brain } from 'lucide-react';
 import GitHubAuth from './GitHubAuth';
 
 const THEME_OPTIONS = [
@@ -6,7 +6,7 @@ const THEME_OPTIONS = [
   { value: 'light-theme', label: 'Light Theme' },
 ];
 
-export default function Header({ theme, onThemeChange, onMenuToggle, onSidebarToggle, user, onUserChange, onGoHome }) {
+export default function Header({ theme, onThemeChange, onMenuToggle, onSidebarToggle, user, onUserChange, onGoHome, onOpenLlmLogin }) {
   return (
     <header className="border-b theme-border theme-surface px-4 sm:px-6 py-3 sm:py-4">
       <div className="flex items-center justify-between">
@@ -83,6 +83,16 @@ export default function Header({ theme, onThemeChange, onMenuToggle, onSidebarTo
           </div>
 
           <GitHubAuth user={user} onUserChange={onUserChange} />
+
+          <button
+            type="button"
+            onClick={onOpenLlmLogin}
+            className="rounded-lg theme-button p-2 transition-colors flex items-center gap-1 text-xs font-semibold"
+            aria-label="LLM Login"
+          >
+            <Brain className="h-4 w-4" />
+            <span className="hidden sm:inline">LLM Login</span>
+          </button>
 
           <a
             href="https://github.com/rvishravars/primer-sparks"

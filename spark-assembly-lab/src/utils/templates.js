@@ -1,5 +1,5 @@
 export const ENHANCED_SPARK_TEMPLATE = `---
-id: spark_<unique_id>
+id: spark_<unique_id_or_slug>
 title: "<Clear, concise spark title>"
 domain: "<research | engineering | policy | education | product | other>"
 spark_type: "<hypothesis | reframing | contradiction | system_design | constraint | exploration>"
@@ -42,6 +42,17 @@ evaluation_strategy:
   method: "<experiment | simulation | case study | prototype | survey | analysis>"
   success_criteria: "<What defines success?>"
   falsifiable: true
+
+# Ownership & routing
+owners:
+  scout: "<github_username_of_primary_scout>"
+  steward: "<optional github_username_of_steward>"
+  reviewers:
+    - "<optional github_username_of_reviewer>"
+
+repo:
+  url: "https://github.com/<org>/<repo>"
+  path: "path/to/spark_file.spark.md"
 
 related_sparks:
   - "<spark_id_if_any>"

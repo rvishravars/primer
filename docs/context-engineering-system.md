@@ -60,7 +60,7 @@ Key ideas:
 
 ### 2.1 LLM Model
 
-- One or more LLMs (e.g., OpenAI, Gemini) made available through a **Model Gateway**.
+- One or more LLMs (e.g., Codex / Claude Code, or other backends) made available through a **Model Gateway**.
 - Different models can be selected per task (e.g., fast model for drafting, stronger model for evaluation).
 
 ### 2.2 Context Window
@@ -165,10 +165,11 @@ Key ideas:
 - Designed to be:
   - **Readable by humans** (markdown/YAML).
   - **Consumable by models** (as structured context).
+  - In this implementation, stored canonically as versioned files in GitHub repositories; no separate database is used as the source of truth for sparks.
 
 ### 3.5 Model Gateway & LLM Backend
 
-- Abstracts away vendor specifics (OpenAI, Gemini, etc.).
+- Abstracts away vendor specifics (Codex, Claude Code, and future providers).
 - Enforces the **context window**:
   - Token accounting for system prompt, spark(s), retrieved snippets, and conversation.
   - Configurable strategies for truncation and summarization.
@@ -206,6 +207,49 @@ A typical interactive request flows as follows:
    - Updates sparks (e.g., new hypotheses, revised plan).
    - Generates a reply for the caller (human or service).
    Optionally logs the full trace for evaluation.
+
+### 4.1 Sequence Diagram: Improving a Spark with Context Engineering
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant UI as Spark UI / AI Workbench
+  participant AO as Agent Orchestrator
+  participant TA as Tool Adapter (MCP)
+  participant RAG as Context Assembly / RAG
+  participant SP as Spark Store
+  participant MG as Model Gateway / LLM
+
+  User->>UI: 1. Open spark & request improvement
+  UI->>AO: 2. Task request ("improve this spark")
+
+  AO->>SP: 3. Load existing spark document
+  SP-->>AO: 4. Current spark (narrative, plan, etc.)
+
+  AO->>TA: 5. Call tools for fresh context
+  TA->>TA: Run code/docs/logs/search tools
+  TA-->>AO: 6. Structured tool results
+
+  AO->>RAG: 7. Build/refresh technical sections
+  RAG->>SP: 8. Update spark technical sections
+  SP-->>RAG: 9. Persisted, structured context
+
+  AO->>MG: 10. Assemble prompt:
+    note right of AO: System prompt +\nUpdated spark content +\nKey snippets +\nUser goal
+  MG->>MG: 11. Enforce context window
+  MG->>MG: Summarize/truncate if needed
+  MG->>MG: Route to chosen LLM
+  MG-->>AO: 12. Model suggestion for spark changes
+
+  AO->>SP: 13. Write AI-proposed revisions\ninto draft sections
+  AO-->>UI: 14. Return diffed suggestions
+
+  UI-->>User: 15. Show proposed edits & rationale
+  User->>UI: 16. Accept/modify/reject
+
+  UI->>SP: 17. Apply accepted changes\n(owner‑approved only)
+  SP-->>AO: 18. Improved spark now canonical
+```
 
 ---
 
@@ -249,7 +293,7 @@ This keeps the spark as the single context artifact, with feedback and proposals
 In the spark-assembly-lab project, you can see concrete examples of these concepts:
 
 - Spark documents and templates (YAML + markdown).
-- An "AI Workbench" that takes a spark and uses Gemini or OpenAI to propose updates.
+- An "AI Workbench" that takes a spark and uses the configured LLM (Codex or Claude Code) to propose updates.
 - A UI and workflow that let humans inspect and apply AI‑generated spark revisions.
 
 Those existing pieces can be evolved into a generic implementation of the architecture described here.

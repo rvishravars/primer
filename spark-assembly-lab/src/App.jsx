@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import SparkSelector from './components/SparkSelector';
 import AssemblyCanvas from './components/AssemblyCanvas';
 import Header from './components/Header';
+import LLMLoginModal from './components/LLMLoginModal';
 import { Sparkles, X, Plus } from 'lucide-react';
 import { generateSparkMarkdown } from './utils/sparkParser';
 import { getStoredUserInfo, parseRepoUrl } from './utils/github';
@@ -20,6 +21,7 @@ function AppMain() {
   const [sparkData, setSparkData] = useState(null);
   const [user, setUser] = useState(() => getStoredUserInfo());
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
+  const [showLlmLogin, setShowLlmLogin] = useState(false);
   const [prRefreshCallback, setPrRefreshCallback] = useState(null);
   const [canPush, setCanPush] = useState(true);
   const [showRepoPrompt, setShowRepoPrompt] = useState(false);
@@ -188,6 +190,7 @@ function AppMain() {
           setIsSidebarCollapsed(newState);
           localStorage.setItem('sparkSidebarCollapsed', newState);
         }}
+        onOpenLlmLogin={() => setShowLlmLogin(true)}
       />
 
       <div className="flex flex-1 overflow-hidden relative">
@@ -355,6 +358,10 @@ function AppMain() {
             </form>
           </div>
         </div>
+      )}
+
+      {showLlmLogin && (
+        <LLMLoginModal onClose={() => setShowLlmLogin(false)} />
       )}
     </div>
   );

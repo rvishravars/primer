@@ -1,61 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Brain, Send, Key, Trash2 } from 'lucide-react';
+import { X, Brain, Send } from 'lucide-react';
 import { generateSparkMarkdown } from '../utils/sparkParser';
-
-const PROVIDERS = [
-  { id: 'gemini', label: 'Google Gemini', description: 'Runs in your browser with your API key' },
-  { id: 'openai', label: 'OpenAI', description: 'Uses the backend proxy' },
-];
-
-const STORAGE_KEYS = {
-  gemini: 'spark_lab_gemini_key',
-  openai: 'spark_lab_openai_key',
-};
-
-const DEFAULT_GEMINI_MODEL = 'models/gemini-1.5-flash';
-const OPENAI_MODELS = [
-  { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
-  { id: 'gpt-4o', label: 'gpt-4o' },
-];
-
-const getStoredApiKey = (provider) => {
-  try {
-    return localStorage.getItem(STORAGE_KEYS[provider]) || '';
-  } catch (e) {
-    console.error('Failed to load API key:', e);
-    return '';
-  }
-};
-
-const saveApiKey = (provider, key) => {
-  try {
-    if (key) {
-      localStorage.setItem(STORAGE_KEYS[provider], key);
-    } else {
-      localStorage.removeItem(STORAGE_KEYS[provider]);
-    }
-  } catch (e) {
-    console.error('Failed to save API key:', e);
-  }
-};
-
-const clearApiKey = (provider) => {
-  try {
-    localStorage.removeItem(STORAGE_KEYS[provider]);
-  } catch (e) {
-    console.error('Failed to clear API key:', e);
-  }
-};
+import { runAgent } from '../utils/apiClient';
+import {
+  getActiveLlmConfig,
+  getBackendConfigForVendor,
+} from '../utils/llmConfig';
 
 export default function AIWorkbenchModal({ sparkData, onClose, onApplyMarkdown }) {
-  const [selectedProvider, setSelectedProvider] = useState('gemini');
-  const [apiKey, setApiKey] = useState('');
-  const [saveKeyToStorage, setSaveKeyToStorage] = useState(false);
-  const [availableModels, setAvailableModels] = useState([]);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_GEMINI_MODEL);
-  const [openaiModel, setOpenaiModel] = useState(OPENAI_MODELS[0].id);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [modelsError, setModelsError] = useState(null);
+  const [{ vendor, apiKey }, setLlmConfig] = useState(() => getActiveLlmConfig());
   const [messages, setMessages] = useState(() => [
     {
       id: 'assistant-initial',
@@ -68,174 +21,36 @@ export default function AIWorkbenchModal({ sparkData, onClose, onApplyMarkdown }
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const [selectedTask, setSelectedTask] = useState('improve_spark_maturity');
+  const [lastContext, setLastContext] = useState(null);
+  const [diffTarget, setDiffTarget] = useState(null);
 
   const sparkMarkdown = useMemo(() => generateSparkMarkdown(sparkData), [sparkData]);
 
   useEffect(() => {
-    const storedKey = getStoredApiKey(selectedProvider);
-    if (storedKey) {
-      setApiKey(storedKey);
-      setSaveKeyToStorage(true);
-    } else {
-      setApiKey('');
-      setSaveKeyToStorage(false);
-    }
-  }, [selectedProvider]);
-
-  useEffect(() => {
-    if (selectedProvider !== 'gemini') return;
-    if (!apiKey) {
-      setAvailableModels([]);
-      setModelsError(null);
-      return;
-    }
-
-    const fetchGeminiModels = async () => {
-      setModelsLoading(true);
-      setModelsError(null);
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`
-        );
-        const data = await response.json();
-        if (!response.ok) {
-          const message = data?.error?.message || 'Failed to load Gemini models.';
-          throw new Error(message);
-        }
-        const models = (data.models || [])
-          .filter((model) => (model.supportedGenerationMethods || []).includes('generateContent'))
-          .map((model) => model.name);
-        setAvailableModels(models);
-        if (models.length > 0) {
-          setSelectedModel(models.includes(DEFAULT_GEMINI_MODEL) ? DEFAULT_GEMINI_MODEL : models[0]);
-        }
-      } catch (err) {
-        setModelsError(err.message || 'Failed to load Gemini models.');
-      } finally {
-        setModelsLoading(false);
-      }
-    };
-
-    fetchGeminiModels();
-  }, [apiKey, selectedProvider]);
-
-  const buildWorkbenchPrompt = (conversation, markdown) => {
-    const historyText = conversation
-      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
-      .join('\n\n');
-
-    return `You are an AI workbench helping improve a Spark document in Primer Spark Assembly Lab.
-
-You always respond as a JSON object (no markdown code fences, no prose) with this exact shape:
-{
-  "reply": "short, conversational response to the user",
-  "updatedSpark": "full updated spark markdown if you propose concrete edits, or an empty string if you are only discussing"
-}
-
-Spark name: ${sparkData.name}
-
-Current Spark markdown (may be truncated):
-<<<SPARK_MARKDOWN>>>
-${markdown.slice(0, 8000)}
-<<<END_SPARK_MARKDOWN>>>
-
-Conversation so far:
-${historyText || '(no previous conversation)'}
-
-When you propose edits, return the full spark in updatedSpark so the UI can apply it. Do not include any keys other than reply and updatedSpark.`;
-  };
-
-  const callGeminiWorkbench = async (conversation) => {
-    if (!apiKey) {
-      throw new Error('Gemini API key required.');
-    }
-    const modelPath = selectedModel.startsWith('models/') ? selectedModel : `models/${selectedModel}`;
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/${modelPath}:generateContent?key=${encodeURIComponent(
-      apiKey
-    )}`;
-
-    const promptText = buildWorkbenchPrompt(conversation, sparkMarkdown);
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: promptText }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 2000,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'object',
-            properties: {
-              reply: { type: 'string' },
-              updatedSpark: { type: 'string' },
-            },
-            required: ['reply'],
-          },
-        },
-      }),
-    });
-
-    const responseBody = await response.json();
-    if (!response.ok) {
-      const message = responseBody?.error?.message || 'Gemini API request failed';
-      throw new Error(message);
-    }
-
-    const candidates = responseBody?.candidates || [];
-    if (candidates.length === 0) {
-      const blockReason = responseBody?.promptFeedback?.blockReason;
-      const safetyMessage = blockReason
-        ? `Gemini blocked the response (${blockReason}). Try simplifying the spark content or your request.`
-        : 'Gemini returned an empty response.';
-      throw new Error(safetyMessage);
-    }
-
-    const text = candidates?.[0]?.content?.parts
-      ?.map((part) => part.text || '')
-      .join('')
-      .trim();
-
-    if (!text) {
-      throw new Error('Gemini returned an empty response.');
-    }
-
-    let cleaned = text.trim();
-    if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
-    if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
-    if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
-
-    const payload = JSON.parse(cleaned);
-    return {
-      reply: payload.reply || '',
-      updatedSpark: payload.updatedSpark || '',
-    };
-  };
+    // Refresh LLM config when the modal mounts so it reflects the latest login.
+    setLlmConfig(getActiveLlmConfig());
+  }, []);
 
   const callOpenAIWorkbench = async (conversation) => {
-    const response = await fetch('/api/workbench/message', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: 'openai',
-        apiKey,
-        model: openaiModel,
-        sparkContent: sparkMarkdown,
-        sparkData: { name: sparkData.name },
-        messages: conversation.map((m) => ({ role: m.role, content: m.content })),
-      }),
+    const cfg = getActiveLlmConfig();
+    const { provider, model } = getBackendConfigForVendor(cfg.vendorId);
+
+    if (!cfg.apiKey) {
+      throw new Error('No LLM API key configured. Use LLM Login in the header to enter a key for Codex or Claude Code.');
+    }
+
+    const data = await runAgent({
+      provider,
+      apiKey: cfg.apiKey,
+      model,
+      taskType: selectedTask,
+      sparkContent: sparkMarkdown,
+      sparkData: { name: sparkData.name },
+      messages: conversation.map((m) => ({ role: m.role, content: m.content })),
     });
 
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data?.error || 'OpenAI request failed');
-    }
+    setLastContext(data.context || null);
 
     return {
       reply: data.reply || '',
@@ -260,10 +75,7 @@ When you propose edits, return the full spark in updatedSpark so the UI can appl
     setSending(true);
 
     try {
-      const result =
-        selectedProvider === 'gemini'
-          ? await callGeminiWorkbench(baseMessages)
-          : await callOpenAIWorkbench(baseMessages);
+      const result = await callOpenAIWorkbench(baseMessages);
 
       const assistantMessage = {
         id: `assistant-${Date.now()}`,
@@ -284,27 +96,6 @@ When you propose edits, return the full spark in updatedSpark so the UI can appl
     onApplyMarkdown(updatedMarkdown);
   };
 
-  const handleProviderChange = (providerId) => {
-    setSelectedProvider(providerId);
-    setError(null);
-  };
-
-  const handleApiKeySaveToggle = (checked) => {
-    setSaveKeyToStorage(checked);
-    if (checked) {
-      saveApiKey(selectedProvider, apiKey);
-    } else {
-      clearApiKey(selectedProvider);
-    }
-  };
-
-  const handleApiKeyChange = (value) => {
-    setApiKey(value);
-    if (saveKeyToStorage) {
-      saveApiKey(selectedProvider, value);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6 theme-overlay backdrop-blur-md">
       <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-3xl border-2 border-design-500 bg-black/90 shadow-[0_0_50px_-12px_rgba(56,189,248,0.6)] backdrop-blur-xl flex flex-col">
@@ -317,7 +108,7 @@ When you propose edits, return the full spark in updatedSpark so the UI can appl
             <div className="min-w-0">
               <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">AI Workbench</h2>
               <p className="text-[11px] sm:text-xs text-white/70 truncate">
-                Chat with Gemini or OpenAI to iteratively improve this spark.
+                Chat with Codex or Claude Code to iteratively improve this spark.
               </p>
             </div>
           </div>
@@ -351,6 +142,14 @@ When you propose edits, return the full spark in updatedSpark so the UI can appl
                       className="mt-2 inline-flex items-center gap-1 rounded-full bg-logic-600/90 hover:bg-logic-500 text-[11px] font-semibold px-2.5 py-1 text-white transition-colors"
                     >
                       <span>Apply suggested spark update</span>
+                    </button>
+                  )}
+                  {m.role === 'assistant' && m.updatedSpark && (
+                    <button
+                      onClick={() => setDiffTarget(m.updatedSpark)}
+                      className="mt-2 ml-2 inline-flex items-center gap-1 rounded-full border border-design-500/70 bg-black/40 hover:bg-design-500/10 text-[10px] px-2 py-0.5 text-design-200 transition-colors"
+                    >
+                      View diff
                     </button>
                   )}
                 </div>
@@ -394,120 +193,127 @@ When you propose edits, return the full spark in updatedSpark so the UI can appl
             </div>
           </div>
 
-          {/* Right: Provider & model settings */}
-          <div className="w-full sm:w-72 flex-shrink-0 bg-black/70 flex flex-col">
+          {/* Right: Provider, task, and context inspector */}
+          <div className="w-full sm:w-80 flex-shrink-0 bg-black/70 flex flex-col">
             <div className="px-4 py-3 border-b border-white/10">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-white/50 font-semibold mb-2">AI Provider</p>
-              <div className="flex flex-col gap-2">
-                {PROVIDERS.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => handleProviderChange(p.id)}
-                    className={`w-full text-left rounded-xl px-3 py-2 border text-xs sm:text-sm transition-all ${
-                      selectedProvider === p.id
-                        ? 'border-design-400 bg-design-500/15 text-white'
-                        : 'border-white/15 hover:border-white/35 text-white/80 hover:text-white'
-                    }`}
-                  >
-                    <div className="font-semibold">{p.label}</div>
-                    <div className="text-[11px] text-white/60 mt-0.5">{p.description}</div>
-                  </button>
-                ))}
+              <p className="text-[11px] uppercase tracking-[0.18em] text-white/50 font-semibold mb-2">LLM Provider</p>
+              <div className="text-xs text-white/80">
+                <p className="font-semibold">{vendor?.label || 'Not configured'}</p>
+                <p className="text-[11px] text-white/60 mt-0.5">
+                  {apiKey
+                    ? vendor?.description || 'Using configured LLM.'
+                    : 'No API key configured. Use LLM Login in the header to set up Codex or Claude Code.'}
+                </p>
+                {vendor && (
+                  <p className="text-[10px] text-white/55 mt-1">
+                    Model: {getBackendConfigForVendor(vendor.id).model}
+                  </p>
+                )}
               </div>
             </div>
 
-            <div className="px-4 py-3 border-b border-white/10 space-y-2 text-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1 text-white/70">
-                  <Key className="h-3 w-3" />
-                  <span>API key</span>
-                </span>
-                {apiKey && (
-                  <button
-                    onClick={() => {
-                      setApiKey('');
-                      clearApiKey(selectedProvider);
-                    }}
-                    className="inline-flex items-center gap-1 text-[11px] text-red-300 hover:text-red-200"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    <span>Clear</span>
-                  </button>
-                )}
-              </div>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder={selectedProvider === 'gemini' ? 'Gemini API key' : 'OpenAI API key'}
-                className="w-full rounded-lg bg-black/40 border border-white/20 px-2 py-1.5 text-xs text-white placeholder:text-white/40 focus:outline-none focus:ring-1 focus:ring-design-400/70 focus:border-design-400/70"
-              />
-              <label className="flex items-center gap-2 text-[11px] text-white/60 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="h-3 w-3 rounded border-white/40 bg-black/40"
-                  checked={saveKeyToStorage}
-                  onChange={(e) => handleApiKeySaveToggle(e.target.checked)}
-                />
-                <span>Remember on this browser</span>
-              </label>
+            <div className="px-4 py-3 border-b border-white/10 flex flex-wrap items-center gap-2 text-[11px] text-white/70">
+              <span className="uppercase tracking-[0.18em] text-white/50 font-semibold">Task</span>
+              <button
+                type="button"
+                onClick={() => setSelectedTask('improve_spark_maturity')}
+                className={`px-2.5 py-1 rounded-full border ${
+                  selectedTask === 'improve_spark_maturity'
+                    ? 'border-design-400 bg-design-500/20 text-design-100'
+                    : 'border-white/20 text-white/65 hover:border-design-400/70 hover:text-design-100'
+                }`}
+              >
+                Audit maturity
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTask('design_experiment_from_spark')}
+                className={`px-2.5 py-1 rounded-full border ${
+                  selectedTask === 'design_experiment_from_spark'
+                    ? 'border-design-400 bg-design-500/20 text-design-100'
+                    : 'border-white/20 text-white/65 hover:border-design-400/70 hover:text-design-100'
+                }`}
+              >
+                Refine experiment
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedTask('summarize_results_for_review')}
+                className={`px-2.5 py-1 rounded-full border ${
+                  selectedTask === 'summarize_results_for_review'
+                    ? 'border-design-400 bg-design-500/20 text-design-100'
+                    : 'border-white/20 text-white/65 hover:border-design-400/70 hover:text-design-100'
+                }`}
+              >
+                Summarize results
+              </button>
             </div>
 
-            {selectedProvider === 'gemini' ? (
-              <div className="px-4 py-3 space-y-2 border-b border-white/10 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70">Gemini model</span>
-                  {modelsLoading && <span className="text-[11px] text-white/50">Loading…</span>}
-                </div>
-                {modelsError && (
-                  <p className="text-[11px] text-red-300">{modelsError}</p>
-                )}
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full rounded-lg bg-black/40 border border-white/20 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-design-400/70 focus:border-design-400/70"
-                >
-                  {[selectedModel, ...availableModels.filter((m) => m !== selectedModel)].map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-white/45">
-                  Models are fetched directly from the Gemini API using your key. No keys are sent to the backend.
-                </p>
-              </div>
-            ) : (
-              <div className="px-4 py-3 space-y-2 border-b border-white/10 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-white/70">OpenAI model</span>
-                </div>
-                <select
-                  value={openaiModel}
-                  onChange={(e) => setOpenaiModel(e.target.value)}
-                  className="w-full rounded-lg bg-black/40 border border-white/20 px-2 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-design-400/70 focus:border-design-400/70"
-                >
-                  {OPENAI_MODELS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[10px] text-white/45">
-                  OpenAI calls are proxied through the backend using your key or the server&apos;s configured key.
-                </p>
-              </div>
-            )}
-
-            <div className="px-4 py-3 text-[10px] text-white/45 space-y-1">
+            <div className="px-4 py-3 border-b border-white/10 text-[10px] text-white/45 space-y-1">
               <p>
-                The AI workbench can propose full spark rewrites. Review changes before applying; they will update the local spark
-                in this browser only until you submit a PR.
+                The AI workbench uses your configured LLM (Codex or Claude Code) via the backend. Review changes before applying;
+                they will update the local spark in this browser only until you submit a PR.
               </p>
+            </div>
+
+            <div className="px-4 py-3 text-[11px] text-white/70 border-t border-white/10 bg-black/80">
+              <p className="font-semibold text-white/80 mb-1">Context Window Inspector</p>
+              {lastContext ? (
+                <div className="space-y-1">
+                  <div>
+                    <span className="text-white/55">Estimated tokens: </span>
+                    <span className="text-design-300">{lastContext.estimated_tokens ?? 'n/a'}</span>
+                  </div>
+                  <p className="text-[10px] text-white/55 mt-1">
+                    RAG / technical sections (stubbed in Phase 2) focus on:
+                  </p>
+                  <ul className="list-disc list-inside text-[10px] text-white/60">
+                    <li>Section 3 — Simulation / Modeling Plan</li>
+                    <li>Section 4 — Evaluation Strategy</li>
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-[10px] text-white/55">Run an LLM task to see approximate token usage and technical sections here.</p>
+              )}
             </div>
           </div>
         </div>
       </div>
+      {diffTarget && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6 theme-overlay backdrop-blur-sm">
+          <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-3xl border-2 border-design-500 bg-black/95 flex flex-col">
+            <div className="flex items-center justify-between px-5 sm:px-6 py-3 border-b border-white/10 bg-gradient-to-r from-design-900/70 via-black to-logic-900/70">
+              <p className="text-sm sm:text-base font-semibold text-white">Proposed Changes Preview</p>
+              <button
+                type="button"
+                onClick={() => setDiffTarget(null)}
+                className="p-1.5 rounded-lg hover:bg-white/10"
+                aria-label="Close diff"
+              >
+                <X className="h-4 w-4 text-white/70" />
+              </button>
+            </div>
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/10 overflow-hidden">
+              <div className="flex flex-col min-h-[200px]">
+                <div className="px-4 sm:px-5 py-2 border-b border-white/10 text-xs font-semibold text-white/70">Current spark</div>
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4 text-[11px] leading-relaxed text-white/70 font-mono bg-black/70">
+                  <pre className="whitespace-pre-wrap break-words">
+                    {sparkMarkdown.slice(0, 6000)}
+                  </pre>
+                </div>
+              </div>
+              <div className="flex flex-col min-h-[200px]">
+                <div className="px-4 sm:px-5 py-2 border-b border-white/10 text-xs font-semibold text-white/70">AI‑proposed spark</div>
+                <div className="flex-1 overflow-y-auto p-3 sm:p-4 text-[11px] leading-relaxed text-white/70 font-mono bg-black/70">
+                  <pre className="whitespace-pre-wrap break-words">
+                    {diffTarget.slice(0, 6000)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

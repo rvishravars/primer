@@ -6,6 +6,7 @@ export function parseSparkFile(content) {
   console.log('🔍 Parsing spark file, content length:', content.length);
 
   let enhancedContributors = { scout: '' };
+  const frontmatter = {};
 
   // Extract spark name - support multiple formats
   let name = 'Untitled Spark';
@@ -15,6 +16,42 @@ export function parseSparkFile(content) {
   const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
   if (frontmatterMatch) {
     const yaml = frontmatterMatch[1];
+    // Very lightweight YAML extraction for common scalar fields used in the
+    // enhanced spark schema. This avoids adding a full YAML parser while still
+    // exposing key metadata to the UI.
+    const extractScalar = (key) => {
+      const m = yaml.match(new RegExp(`^${key}:\\s*(.+)$`, 'mi'));
+      if (!m) return undefined;
+      return m[1].trim().replace(/^['"]|['"]$/g, '');
+    };
+
+    const scalarKeys = [
+      'id',
+      'title',
+      'domain',
+      'spark_type',
+      'maturity_level',
+      'status',
+      'core_claim',
+      'problem_statement',
+    ];
+    scalarKeys.forEach((key) => {
+      const value = extractScalar(key);
+      if (value !== undefined) {
+        frontmatter[key] = value;
+      }
+    });
+
+    // Extract simple owner mapping from the ownership block when present.
+    const scoutMatch = yaml.match(/^owners:\s*[\r\n]+\s*scout:\s*(.+)$/mi);
+    if (scoutMatch) {
+      enhancedContributors.scout = scoutMatch[1].trim().replace(/^['"]|['"]$/g, '');
+    }
+
+    const repoPathMatch = yaml.match(/^repo:\s*[\r\n]+\s*path:\s*(.+)$/mi);
+    if (repoPathMatch) {
+      frontmatter.repoPath = repoPathMatch[1].trim().replace(/^['"]|['"]$/g, '');
+    }
     // Try `name:` first, then `title:` (used by enhanced sparks)
     const nameFieldMatch = yaml.match(/^name:\s*(.+)$/m);
     const titleFieldMatch = yaml.match(/^title:\s*(.+)$/m);
@@ -59,7 +96,7 @@ export function parseSparkFile(content) {
   const result = {
     name,
     markedForDeletion,
-    frontmatter: {},
+    frontmatter,
     isEnhanced: true, // All sprouts are now considered enhanced
     sections: extractGranularSections(content || ''),
     contributors: {
