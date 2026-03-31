@@ -8,9 +8,9 @@ A React-based modular interface for building and visualizing **Enhanced Sparks**
 ![Assembly Canvas](./docs/screenshots/assembly-canvas.png)
 *The split-view interface: Fixed Narrative (Left) and Swappable Research Modules (Right)*
 
-### 8-Section Building Blocks
+### 3-Section Core Structure
 ![Building Blocks](./docs/screenshots/building-blocks.png)
-*Modular sections (Narrative, Hypothesis, Modeling, etc.) with maturity-specific indicators*
+*Modernized sections (Narrative, Hypothesis, Testing) without YAML frontmatter dependencies*
 
 ### Full-Screen Editor
 ![Full Screen Editor](./docs/screenshots/fullscreen-editor.png)
@@ -25,8 +25,8 @@ A React-based modular interface for building and visualizing **Enhanced Sparks**
 ## 🎯 Features
 
 - **Split-View Canvas**: Always-on visibility of the **Spark Narrative** while iterating on technical sections.
-- **8-Section Standard**: Full support for the v3.0 Enhanced Spark template (Hypothesis, Modeling, Evaluation, etc.).
-- **Smart Maturity Tracking**: Stability indicators scale based on active sections (e.g., `4/8 Stable`).
+- **3-Section Core Standard**: Streamlined v3.0 Pure Markdown template (Narrative, Hypothesis, Testing).
+- **Zero-Metadata Parsing**: Identities are derived from H1 headings; no YAML frontmatter required.
 - **Glass Box AI Feedback**: Powered by local-first models or Cloud APIs to audit your hypothesis and results.
 - **Global Spark Search**: Find `.spark.md` files across all of GitHub with advanced filters.
 - **GitHub Integration**: Login via PAT to load/save sparks directly to repositories.
@@ -39,14 +39,9 @@ A React-based modular interface for building and visualizing **Enhanced Sparks**
 
 Instead of static phases, the Lab supports 8 modular sections that define a spark's maturity:
 
-1. **Spark Narrative** (Required for `seed`)
-2. **Hypothesis Formalization** (Required for `structured`)
-3. **Simulation / Modeling Plan** (Required for `modeled`)
-4. **Evaluation Strategy**
-5. **Feedback & Critique**
-6. **Results** (Required for `validated`)
-7. **Revision Notes**
-8. **Next Actions**
+1. **Spark Narrative** (The core story and intuition)
+2. **Hypothesis Formalization** (Falsifiable statements and logic)
+3. **Testing & Results** (Experimentation, model outputs, and evaluation)
 
 ---
 
@@ -107,7 +102,7 @@ Stability is no longer a simple 1-2-3 count. It is calculated based on the numbe
 2. Draft your core idea in the **Left Column** (Spark Narrative).
 3. Use the **Right Column Picker** to select a module to work on (e.g., Hypothesis).
 4. Use the **Bottom Tab Strip** to quickly swap between active modules.
-5. Click **Download** to save the `.spark.md` file with full YAML frontmatter.
+5. Click **Download** or **Submit** to generate a clean `.spark.md` file (Zero YAML).
 
 ### GitHub Search
 - Switch to the **Global Search** tab.

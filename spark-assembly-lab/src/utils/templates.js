@@ -1,66 +1,4 @@
-export const ENHANCED_SPARK_TEMPLATE = `---
-id: spark_<unique_id_or_slug>
-title: "<Clear, concise spark title>"
-domain: "<research | engineering | policy | education | product | other>"
-spark_type: "<hypothesis | reframing | contradiction | system_design | constraint | exploration>"
-
-maturity_level: "<seed | structured | modeled | validated | implemented>"
-status: "<draft | under_review | iterating | accepted | archived>"
-
-core_claim: "<One-sentence central claim or shift>"
-
-problem_statement: "<What gap or inefficiency does this address?>"
-
-assumptions:
-  - "<Assumption 1>"
-  - "<Assumption 2>"
-
-unknowns:
-  - "<Unknown 1>"
-  - "<Unknown 2>"
-
-variables:
-  independent:
-    - "<Variable manipulated>"
-  dependent:
-    - "<Outcome measured>"
-
-metrics:
-  - "<Metric 1>"
-  - "<Metric 2>"
-
-constraints:
-  - "<Budget / time / technical constraint>"
-  - "<Acceptable trade-offs>"
-
-risks:
-  - "<Technical risk>"
-  - "<Adoption risk>"
-  - "<Ethical or unintended consequence>"
-
-evaluation_strategy:
-  method: "<experiment | simulation | case study | prototype | survey | analysis>"
-  success_criteria: "<What defines success?>"
-  falsifiable: true
-
-# Ownership & routing
-owners:
-  scout: "<github_username_of_primary_scout>"
-  steward: "<optional github_username_of_steward>"
-  reviewers:
-    - "<optional github_username_of_reviewer>"
-
-repo:
-  url: "https://github.com/<org>/<repo>"
-  path: "path/to/spark_file.spark.md"
-
-related_sparks:
-  - "<spark_id_if_any>"
-
-revision_history:
-  - version: "0.1"
-    note: "Initial structured spark"
----
+export const ENHANCED_SPARK_TEMPLATE = `# New Spark
 
 # 1. Spark Narrative
 <!-- Describe the idea clearly and compellingly.
@@ -80,72 +18,18 @@ revision_history:
 
 ---
 
-# 3. Simulation / Modeling Plan
-<!-- Describe how the idea will be tested before full implementation. -->
+# 3. Testing & Results
+<!-- Describe how the idea will be tested and what outcomes are observed.
+     Include model type, inputs, outcomes, and deviations. -->
 
-## Model Type
+## Model / Experiment Type
 - <Data replay / mathematical model / agent-based simulation / prototype / other>
 
-## Inputs
-- <Data or parameters required>
+## Methodology & Inputs
+- <Parameters and success criteria for the test>
 
-## Expected Outputs
-- <What results will be generated?>
-
-## Sensitivity Analysis
-- <What variables may significantly change outcomes?>
-
----
-
-# 4. Evaluation Strategy
-<!-- Define how evidence will be gathered and judged. -->
-
-- Measurement method:
-- Data source:
-- Statistical or logical criteria:
-- Comparison baseline:
-
----
-
-# 5. Feedback & Critique
-<!-- Document structured critique. -->
-
-## Internal Critique
-- Hidden assumptions:
-- Weaknesses:
-- Scalability concerns:
-
-## Counter-Hypothesis
-> "<Alternative explanation or competing theory>"
-
----
-
-# 6. Results (When Available)
-<!-- Populate after simulation or experimentation. -->
-
-- Observed outcomes:
-- Deviations from expectation:
-- Surprises:
-
----
-
-# 7. Revision Notes
-<!-- Track how the idea evolves. -->
-
-- What changed?
-- Why?
-- New maturity level:
-
----
-
-# 8. Next Actions
-<!-- Concrete steps forward. -->
-
-- [ ] Run simulation
-- [ ] Gather dataset
-- [ ] Peer review
-- [ ] Prototype
-- [ ] Publish findings
+## Observed Outcomes
+- <What results were generated? What surprises occurred?>
 
 ---
 
@@ -162,33 +46,8 @@ revision_history:
 
 ---
 
-## Proposed Changes to Section 3 (Simulation / Modeling Plan)
+## Proposed Changes to Section 3 (Testing & Results)
 <!-- Suggest modeling improvements or alternative evaluation approaches. -->
-
----
-
-## Proposed Changes to Section 4 (Evaluation Strategy)
-<!-- Propose refinements to success criteria or measurement methods. -->
-
----
-
-## Proposed Changes to Section 5 (Feedback & Critique)
-<!-- Add structured critiques or counter-hypotheses. -->
-
----
-
-## Proposed Changes to Section 6 (Results)
-<!-- Community replications or additional findings. -->
-
----
-
-## Proposed Changes to Section 7 (Revision Notes)
-<!-- Suggest evolutionary improvements to the spark. -->
-
----
-
-## Proposed Changes to Section 8 (Next Actions)
-<!-- Suggest concrete next steps or refinements. -->
 
 ---
 

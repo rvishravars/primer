@@ -9,7 +9,7 @@ Please capture the following screenshots for the main README:
 - Split-view interface showing Section 1 (Spark Narrative) on the left.
 - Sections/Modules picker or active module on the right.
 - Show the bottom tab strip for section switching.
-- Show the stability indicator in the top header (e.g., 2/8 Stable).
+- Show the stability indicator in the top header (e.g., 2/3 Core).
 
 **How to capture:**
 - Load an existing enhanced spark.

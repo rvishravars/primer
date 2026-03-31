@@ -23,6 +23,18 @@ const VENDORS = [
       { id: 'claude-3.5-haiku', label: 'Claude 3.5 Haiku (fast)' },
     ],
   },
+  {
+    id: 'gemini',
+    label: 'Gemini (Google)',
+    description: 'Google Gemini models via backend proxy',
+    backendProvider: 'google',
+    defaultModel: 'gemini-pro-latest',
+    models: [
+      { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro (State-of-the-art)' },
+      { id: 'gemini-pro-latest', label: 'Gemini Pro (Stable)' },
+      { id: 'gemini-flash-latest', label: 'Gemini Flash (fast)' },
+    ],
+  },
 ];
 
 const STORAGE_KEYS = {

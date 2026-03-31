@@ -37,10 +37,10 @@ export default function Header({ theme, onThemeChange, onMenuToggle, onSidebarTo
             <Boxes className="h-6 w-6 sm:h-8 sm:w-8 text-design-500 flex-shrink-0" />
             <div className="min-w-0">
               <h1 className="text-lg sm:text-2xl font-bold font-mono truncate">
-                Spark Assembly Lab
+                Primer: Transparency Hub
               </h1>
               <p className="text-xs sm:text-sm theme-muted hidden sm:block">
-                Primer v2.0 | Build in LEGO-style
+                Engineering Global Transparency and Civic Consensus
               </p>
             </div>
           </button>

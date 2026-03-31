@@ -59,7 +59,6 @@ function AppMain() {
         sections: spark.sections || {},
         activeSections: [1],
         contributors: spark.contributors,
-        proposals: spark.proposals || { 1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '', 8: '' },
         sourcePath: spark.sourcePath || spark.sourceFile || null,
         lastCommit: spark.lastCommit || null,
       };
@@ -144,10 +143,10 @@ function AppMain() {
       name: 'New Spark',
       markedForDeletion: false,
       isEnhanced: true,
-      sections: parsedTemplate.sections, // All 8 sections from the template
+      sections: parsedTemplate.sections, // All sections from the template (now 3)
       activeSections: [1], // Only Section 1 is active by default
       contributors: {},
-      proposals: parsedTemplate.proposals || { 1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '', 8: '' },
+      proposals: parsedTemplate.proposals || { 1: '', 2: '', 3: '' },
       sourcePath: null,
       rawContent: ENHANCED_SPARK_TEMPLATE
     };

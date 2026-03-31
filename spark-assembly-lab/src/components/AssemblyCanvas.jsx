@@ -1,41 +1,43 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, ChevronLeft, ChevronRight, Plus, MessageCircle } from 'lucide-react';
+import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import MarkdownPreview from './MarkdownPreview';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
-import AIWorkbenchModal from './AIWorkbenchModal';
-import PRTracker from './PRTracker';
-import CommentsPanel from './CommentsPanel';
-import FeedbackIssueLinks from './FeedbackIssueLinks';
+import AIWorkbenchPanel from './AIWorkbenchPanel';
 import { generateSparkMarkdown, parseSparkFile, validateSparkData } from '../utils/sparkParser';
 import { useToast } from '../utils/ToastContext';
 import { getStoredToken, getStoredUserInfo, parseRepoUrl } from '../utils/github';
-import ContributorsList from './ContributorsList';
 
 const ENHANCED_SECTIONS_CONFIG = {
   1: { title: '1. Spark Narrative', description: 'The core story of the idea', color: 'spark' },
   2: { title: '2. Hypothesis Formalization', description: 'Convert into a falsifiable statement', color: 'design' },
-  3: { title: '3. Simulation / Modeling Plan', description: 'Test the idea before full implementation', color: 'logic' },
-  4: { title: '4. Evaluation Strategy', description: 'Define how evidence will be gathered and judged', color: 'design' },
-  5: { title: '5. Feedback & Critique', description: 'Internal critique and counter-hypotheses', color: 'spark' },
-  6: { title: '6. Results (When Available)', description: 'Observed outcomes, deviations & surprises', color: 'logic' },
-  7: { title: '7. Revision Notes', description: 'How the idea evolved over iterations', color: 'design' },
-  8: { title: '8. Next Actions', description: 'Concrete steps forward', color: 'spark' }
+  3: { title: '3. Testing & Results', description: 'Experimentation outcomes and evaluation', color: 'logic' }
+};
+
+const ContributorsList = ({ contributors, loading }) => {
+  if (loading) return <div className="text-[10px] opacity-40 animate-pulse mt-1">Loading community...</div>;
+  if (!contributors || contributors.length === 0) return null;
+  return (
+    <div className="flex -space-x-2 mt-2 overflow-hidden items-center">
+      {contributors.slice(0, 5).map(c => (
+        <img key={c.login} className="inline-block h-5 w-5 rounded-full ring-2 ring-black" src={c.avatar_url} alt={c.login} title={c.login} />
+      ))}
+      {contributors.length > 5 && <span className="pl-3 text-[10px] opacity-40">+{contributors.length - 5} others</span>}
+    </div>
+  );
 };
 
 export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, originalSparkData, onResetSpark, isReadOnly, onPRCreated, canPush = true, onNewSpark, viewMode = 'components' }) {
   const [showPreview, setShowPreview] = useState(false);
-  const [showQuiz, setShowQuiz] = useState(false);
-  const [showPRTracker, setShowPRTracker] = useState(false);
-  const [showCommentsPanel, setShowCommentsPanel] = useState(false);
+  const [showWorkbench, setShowWorkbench] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
-  const [editStatus, setEditStatus] = useState(null);
+  const [isWorkbenchExpanded, setIsWorkbenchExpanded] = useState(false);
   const [editingSection, setEditingSection] = useState(null);
   const [sectionDraft, setSectionDraft] = useState('');
   const [toolbarExpanded, setToolbarExpanded] = useState(true);
@@ -44,11 +46,12 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   const [contributorsLoading, setContributorsLoading] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [feedbackDraft, setFeedbackDraft] = useState('');
-  const [hasHighlightedFeedback, setHasHighlightedFeedback] = useState(false);
-  const [highlightPropose, setHighlightPropose] = useState(false);
+  const [highlightPropose] = useState(false);
+  
   const sparkDataRef = useRef(sparkData);
   const toast = useToast();
   const user = getStoredUserInfo();
+
   const isOwner = user && (() => {
     let repoOwner = '';
     try {
@@ -61,32 +64,15 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       user.login?.toLowerCase() === repoOwner.toLowerCase()
     );
   })();
-  const canAddFeedback = !!user && !isOwner;
-
-  // On first load for non-owners, gently surface Feedback & Critique alongside the narrative
-  useEffect(() => {
-    if (!canAddFeedback || hasHighlightedFeedback || !sparkData) return;
-    const active = sparkData.activeSections || [1];
-    if (!active.includes(5)) {
-      onSparkUpdate({
-        ...sparkData,
-        activeSections: [1, 5],
-      });
-    }
-    setHasHighlightedFeedback(true);
-    // We intentionally include only a subset of deps to avoid re-running when sparkData changes shape.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canAddFeedback, hasHighlightedFeedback, onSparkUpdate]);
 
   useEffect(() => {
     sparkDataRef.current = sparkData;
   }, [sparkData]);
 
-  // Reset some UI state when the global view mode changes
+  // Reset UI state when the global view mode changes
   useEffect(() => {
     setShowPreview(false);
-    setShowPRTracker(false);
-    setShowCommentsPanel(false);
+    setShowWorkbench(false);
   }, [viewMode]);
 
   // Load contributors for the selected spark
@@ -121,11 +107,10 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
     return () => controller.abort();
   }, [sparkData?.sourcePath, repoUrl]);
 
-
   const handleDownload = () => {
-    const validation = validateSparkData(sparkData);
-    if (!validation.valid) {
-      toast.error(`Sanctity check failed: ${validation.errors.join('; ')}`);
+    const validationResult = validateSparkData(sparkData);
+    if (!validationResult.valid) {
+      toast.error(`Sanctity check failed: ${validationResult.errors.join('; ')}`);
       return;
     }
     const md = generateSparkMarkdown(sparkData);
@@ -142,35 +127,12 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   };
 
   const handleCopyToClipboard = () => {
-    const validation = validateSparkData(sparkData);
-    if (!validation.valid) {
-      toast.error(`Sanctity check failed: ${validation.errors.join('; ')}`);
-      return;
-    }
     const md = generateSparkMarkdown(sparkData);
     navigator.clipboard.writeText(md).then(
       () => toast.success('Markdown copied to clipboard!'),
       () => toast.error('Failed to copy to clipboard')
     );
   };
-
-  const calculateCompleteness = () => {
-    const sections = sparkData.sections || {};
-    const total = 8;
-    let filled = 0;
-    for (let i = 1; i <= total; i += 1) {
-      if ((sections[i] || '').trim().length > 0) {
-        filled += 1;
-      }
-    }
-    return { filled, total };
-  };
-
-  const completeness = calculateCompleteness();
-  const validation = validateSparkData(sparkData);
-  const isDirty = originalSparkData
-    ? JSON.stringify(sparkData) !== JSON.stringify(originalSparkData)
-    : true;
 
   const formatTimeAgo = (isoString) => {
     if (!isoString) return null;
@@ -202,20 +164,29 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
     return `${yearsPart} ${monthsPart} ago`;
   };
 
+  const calculateCompleteness = () => {
+    const sections = sparkData.sections || {};
+    const total = 3;
+    let filled = 0;
+    for (let i = 1; i <= total; i += 1) {
+      if ((sections[i] || '').trim().length > 0) {
+        filled += 1;
+      }
+    }
+    return { filled, total };
+  };
+
+  const completeness = calculateCompleteness();
+  const validation = validateSparkData(sparkData);
+  const isDirty = originalSparkData
+    ? JSON.stringify(sparkData) !== JSON.stringify(originalSparkData)
+    : true;
+
   const handleEditDone = () => {
     const result = validateSparkData(sparkData);
-    if (result.valid) {
-      setEditStatus({
-        type: 'success',
-        message: 'Saved locally. Ready to submit.',
-      });
-      return;
+    if (!result.valid) {
+      toast.error(`Validation failed: ${result.errors.join('; ')}`);
     }
-
-    setEditStatus({
-      type: 'error',
-      message: `Validation failed: ${result.errors.join('; ')}`,
-    });
   };
 
   const openSectionEditor = (sectionNum) => {
@@ -243,27 +214,24 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
     if (!markdown) return;
     try {
       const parsed = parseSparkFile(markdown);
+      const hasNewSections = parsed?.sections && Object.keys(parsed.sections).length > 0;
       const updated = {
         ...sparkData,
         name: parsed?.name || sparkData.name,
-        markedForDeletion:
-          typeof parsed?.markedForDeletion === 'boolean' ? parsed.markedForDeletion : sparkData.markedForDeletion,
-        sections: parsed?.sections || sparkData.sections,
+        markedForDeletion: typeof parsed?.markedForDeletion === 'boolean' ? parsed.markedForDeletion : sparkData.markedForDeletion,
+        sections: hasNewSections ? { ...sparkData.sections, ...parsed.sections } : sparkData.sections,
         proposals: parsed?.proposals || sparkData.proposals,
       };
       onSparkUpdate(updated);
-      // Keep markdown view in sync if user switches modes later.
-      // No longer syncing a separate markdown draft; edits flow through structured sections.
       setAiApplied(true);
-      toast.success('AI workbench suggestion applied. Review and sync when ready.');
+      toast.success('AI workbench suggestion applied.');
     } catch (e) {
-      toast.error('Failed to apply AI-generated spark changes.');
+      console.error('AI Apply Error:', e);
+      toast.error('Failed to apply AI changes.');
     }
   };
 
-
   const handleSubmit = async () => {
-    // If confirmation is not yet shown, show it first
     if (!showConfirmation) {
       const validationResult = validateSparkData(sparkData);
       if (!validationResult.valid) {
@@ -276,14 +244,12 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
 
     const token = getStoredToken();
     if (!token) {
-      toast.error('GitHub token required to submit a PR');
+      toast.error('GitHub token required');
       setShowConfirmation(false);
       return;
     }
 
     setIsSubmitting(true);
-
-    // Cool progress simulation
     for (let i = 0; i <= 100; i += 5) {
       setSyncProgress(i);
       await new Promise(r => setTimeout(r, 40));
@@ -291,10 +257,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
 
     try {
       const markdown = generateSparkMarkdown(sparkData);
-      const slug = sparkData.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
+      const slug = sparkData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const path = sparkData.sourcePath || `sparks/${slug || 'new-spark'}.spark.md`;
       const title = `Spark: ${sparkData.name}`;
       const body = `Automated submission from Spark Assembly Lab.`;
@@ -314,23 +277,12 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       });
 
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit PR');
-      }
+      if (!response.ok) throw new Error(data.error || 'Failed to submit PR');
 
-      if (data.is_proposal) {
-        toast.success(`Proposal submitted as a PR: ${data.pr_url}`);
-      } else {
-        toast.success(`PR created: ${data.pr_url}`);
-      }
+      toast.success(data.is_proposal ? 'Proposal submitted!' : 'PR created!');
       setShowConfirmation(false);
-      if (data.pr_url) {
-        window.open(data.pr_url, '_blank');
-      }
-      // Refresh PR counts
-      if (onPRCreated) {
-        onPRCreated();
-      }
+      if (data.pr_url) window.open(data.pr_url, '_blank');
+      if (onPRCreated) onPRCreated();
     } catch (err) {
       toast.error(err.message || 'Failed to submit PR');
       setSyncProgress(0);
@@ -340,22 +292,15 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   };
 
   const handleReset = () => {
-    if (!onResetSpark || !originalSparkData) {
-      return;
-    }
+    if (!onResetSpark || !originalSparkData) return;
     onResetSpark();
-    setEditStatus({
-      type: 'success',
-      message: 'Changes reset to original content.',
-    });
-    toast.success('Changes reset to original content.');
+    toast.success('Reset to original.');
     setAiApplied(false);
   };
 
   const handleDeleteRequest = async () => {
-    // Check if user is the owner
     if (!isOwner) {
-      toast.error('Only the spark owner can delete a spark');
+      toast.error('Only owners can delete');
       return;
     }
 
@@ -366,56 +311,38 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
 
     const token = getStoredToken();
     if (!token) {
-      toast.error('GitHub token required to submit a delete request');
+      toast.error('Token required');
       setShowDeleteConfirmation(false);
       return;
     }
 
     setIsSubmitting(true);
-
-    // Cool progress simulation
     for (let i = 0; i <= 100; i += 5) {
       setSyncProgress(i);
       await new Promise(r => setTimeout(r, 40));
     }
 
     try {
-      const slug = sparkData.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
+      const slug = sparkData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
       const path = sparkData.sourcePath || `sparks/${slug || 'new-spark'}.spark.md`;
       const title = `Delete Spark: ${sparkData.name}`;
-      const body = `Request to delete spark: ${sparkData.name}\n\nRequested by @${user?.login}. To cancel this deletion, close this PR without merging.`;
+      const body = `Request to delete spark: ${sparkData.name}\n\nRequested by @${user?.login}.`;
 
       const response = await fetch('/api/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token,
-          repo: repoUrl,
-          path,
-          title,
-          body,
-        }),
+        body: JSON.stringify({ token, repo: repoUrl, path, title, body }),
       });
 
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to submit delete request');
-      }
+      if (!response.ok) throw new Error(data.error || 'Failed to delete');
 
-      toast.success(`Delete PR created: ${data.pr_url}`);
+      toast.success('Delete request created!');
       setShowDeleteConfirmation(false);
-      if (data.pr_url) {
-        window.open(data.pr_url, '_blank');
-      }
-      // Refresh PR counts
-      if (onPRCreated) {
-        onPRCreated();
-      }
+      if (data.pr_url) window.open(data.pr_url, '_blank');
+      if (onPRCreated) onPRCreated();
     } catch (err) {
-      toast.error(err.message || 'Failed to submit delete request');
+      toast.error(err.message || 'Failed to delete');
       setSyncProgress(0);
     } finally {
       setIsSubmitting(false);
@@ -423,9 +350,9 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden theme-surface">
       {/* Toolbar */}
-      <div className="border-b theme-border theme-surface px-4 sm:px-6 py-3 sm:py-4">
+      <div className="border-b theme-border theme-surface px-4 sm:px-6 py-3 sm:py-4 flex-shrink-0">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
           <div className="flex-1 min-w-0">
             <input
@@ -443,16 +370,11 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                   Updated {formatTimeAgo(sparkData.lastCommit.date)}
                 </span>
               )}
+
               {(() => {
                 const total = completeness.total;
                 const ratio = total === 0 ? 0 : completeness.filled / total;
-                const color = ratio === 0
-                  ? 'bg-red-600'
-                  : ratio < 0.4
-                    ? 'bg-spark-600'
-                    : ratio < 0.8
-                      ? 'bg-design-600'
-                      : 'bg-logic-600';
+                const color = ratio === 0 ? 'bg-red-600' : ratio < 0.4 ? 'bg-spark-600' : ratio < 0.8 ? 'bg-design-600' : 'bg-logic-600';
                 return (
                   <span className={`inline-flex items-center rounded-full px-2 sm:px-3 py-0.5 sm:py-1 text-xs font-semibold ${color}`}>
                     Completeness {completeness.filled}/{total}
@@ -464,617 +386,228 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                   AI suggestion applied
                 </span>
               )}
-              {originalSparkData && originalSparkData.name !== sparkData.name && (
-                <span className="inline-flex items-center rounded-full px-2 sm:px-3 py-0.5 sm:py-1 text-xs font-semibold bg-yellow-600 text-white">
-                  Edited
-                </span>
-              )}
-              {!validation.valid && (
-                <span className="text-xs text-red-300">Sanctity check failed</span>
-              )}
+              {!validation.valid && <span className="text-xs text-red-300">Sanctity check failed</span>}
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* More Actions toggle: roll in / roll out */}
             <button
               onClick={() => setToolbarExpanded(!toolbarExpanded)}
               className="p-2 rounded-lg theme-button hover:bg-white/10 transition-colors flex-shrink-0"
               title={toolbarExpanded ? 'Hide actions' : 'More actions'}
-              aria-expanded={toolbarExpanded}
             >
-              {toolbarExpanded ? (
-                <ChevronRight className="h-5 w-5" />
-              ) : (
-                <ChevronLeft className="h-5 w-5" />
-              )}
+              {toolbarExpanded ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
             </button>
 
-            <div
-              className={`flex items-center gap-2 transition-all duration-200 origin-right ${
-                toolbarExpanded
-                  ? 'opacity-100 max-w-3xl translate-x-0'
-                  : 'opacity-0 max-w-0 -translate-x-2 pointer-events-none overflow-hidden'
-              }`}
-            >
-              {/* Primary Toggle: Create New Spark */}
-              <button
-                onClick={onNewSpark}
-                className="flex items-center justify-center rounded-lg bg-design-600 hover:bg-design-700 p-1.5 sm:p-2 transition-colors flex-shrink-0 group relative"
-                title="Create New Spark"
-              >
-                <Plus className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-                <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-2 py-1 bg-black text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-[70] border border-white/10">
-                  New Spark
-                </span>
-              </button>
-
-              {/* Primary Toggle: Preview/Edit (icon only, tooltip text) */}
+            <div className={`flex items-center gap-2 transition-all duration-200 origin-right ${toolbarExpanded ? 'opacity-100 max-w-3xl translate-x-0' : 'opacity-0 max-w-0 -translate-x-2 pointer-events-none overflow-hidden'}`}>
+              <button onClick={onNewSpark} className="flex items-center justify-center rounded-lg bg-design-600 hover:bg-design-700 p-2 text-white group" title="New Spark"><Plus className="h-5 w-5" /></button>
               {viewMode === 'components' && (
-                <button
-                  onClick={() => setShowPreview(!showPreview)}
-                  className="flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 transition-colors flex-shrink-0"
-                  title={showPreview ? 'Switch to edit mode' : 'Preview spark'}
-                  aria-label={showPreview ? 'Switch to edit mode' : 'Preview spark'}
-                >
-                  <Eye className="h-4 w-4" />
-                </button>
+                <button onClick={() => setShowPreview(!showPreview)} className="flex items-center justify-center rounded-lg theme-button p-2.5" title="Toggle Preview"><Eye className="h-4 w-4" /></button>
               )}
-
-              {/* Primary Action: Submit (icon only, tooltip text) */}
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitting || isReadOnly || !isDirty}
-                className={`flex items-center justify-center rounded-lg bg-logic-600 p-2 sm:p-2.5 text-xs sm:text-sm font-semibold hover:bg-logic-700 transition-colors disabled:opacity-60 flex-shrink-0 ${isReadOnly || !isDirty ? 'cursor-not-allowed grayscale' : ''} ${highlightPropose && !canPush ? 'animate-pulse ring-2 ring-logic-300 ring-offset-2 ring-offset-black' : ''}`}
-                title={canPush ? 'Submit changes' : (highlightPropose ? 'Propose changes (next step after feedback)' : 'Propose changes')}
-                aria-label={canPush ? 'Submit changes' : 'Propose changes'}
+                className={`flex items-center justify-center rounded-lg bg-logic-600 p-2.5 text-xs font-semibold hover:bg-logic-700 transition-colors disabled:opacity-60 ${highlightPropose && !showConfirmation ? 'animate-pulse ring-2 ring-logic-300' : ''}`}
+                title="Propose changes"
               >
                 <GitPullRequest className="h-4 w-4" />
               </button>
-
-              {/* Secondary actions inline when expanded (icons only, tooltip text) */}
               <button
-                onClick={() => setShowQuiz(true)}
+                onClick={() => setShowWorkbench(!showWorkbench)}
                 disabled={!user}
-                className="hidden sm:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
-                title="Open AI workbench"
-                aria-label="Open AI workbench"
+                className={`hidden sm:flex items-center justify-center rounded-lg p-2.5 transition-all ${showWorkbench ? 'bg-design-600/20 text-design-300 border border-design-500/50' : 'theme-button'}`}
+                title="AI Workbench"
               >
-                <Brain className="h-4 w-4 text-design-400" />
+                <Brain className="h-4 w-4" />
               </button>
-
-              <button
-                onClick={() => setShowPRTracker(!showPRTracker)}
-                className="hidden sm:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors"
-                title="View evolution"
-                aria-label="View evolution"
-              >
-                <GitPullRequest className="h-4 w-4 theme-muted" />
-              </button>
-
-              <button
-                onClick={() => {
-                  const next = !showCommentsPanel;
-                  setShowCommentsPanel(next);
-                  if (next) {
-                    setShowPRTracker(false);
-                  }
-                }}
-                className="hidden sm:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors"
-                title="View comments"
-                aria-label="View comments"
-              >
-                <MessageCircle className="h-4 w-4 theme-muted" />
-              </button>
-
-              <button
-                onClick={handleCopyToClipboard}
-                className="hidden md:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors"
-                title="Copy markdown to clipboard"
-                aria-label="Copy markdown to clipboard"
-              >
-                <Copy className="h-4 w-4 theme-muted" />
-              </button>
-
-              <button
-                onClick={handleDownload}
-                className="hidden md:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors"
-                title="Download markdown"
-                aria-label="Download markdown"
-              >
-                <Download className="h-4 w-4 theme-muted" />
-              </button>
-
-              <button
-                onClick={handleReset}
-                disabled={!isDirty || isReadOnly}
-                className="hidden lg:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50"
-                title="Reset to original"
-                aria-label="Reset to original"
-              >
-                <RotateCcw className="h-4 w-4 text-yellow-500/80" />
-              </button>
-
-              <button
-                onClick={handleDeleteRequest}
-                disabled={isSubmitting || isReadOnly || !originalSparkData || !isOwner}
-                className="hidden lg:flex items-center justify-center rounded-lg theme-button p-2 sm:p-2.5 text-xs sm:text-sm font-semibold transition-colors disabled:opacity-50 text-red-400 hover:bg-red-500/10"
-                title="Delete spark (owners only)"
-                aria-label="Delete spark (owners only)"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <button onClick={handleCopyToClipboard} className="hidden md:flex items-center justify-center rounded-lg theme-button p-2.5" title="Copy Markdown"><Copy className="h-4 w-4" /></button>
+              <button onClick={handleDownload} className="hidden md:flex items-center justify-center rounded-lg theme-button p-2.5" title="Download"><Download className="h-4 w-4" /></button>
+              <button onClick={handleReset} disabled={!isDirty || isReadOnly} className="hidden lg:flex items-center justify-center rounded-lg theme-button p-2.5 disabled:opacity-50" title="Reset"><RotateCcw className="h-4 w-4 text-yellow-500/80" /></button>
+              <button onClick={handleDeleteRequest} disabled={isSubmitting || isReadOnly || !isOwner} className="hidden lg:flex items-center justify-center rounded-lg theme-button p-2.5 text-red-400 hover:bg-red-500/10" title="Delete"><Trash2 className="h-4 w-4" /></button>
             </div>
           </div>
         </div>
       </div>
 
       {isReadOnly && (
-        <div className="mx-4 sm:mx-6 mt-4 rounded-lg border border-design-500/40 bg-design-500/10 px-3 py-2 text-xs sm:text-sm text-design-100">
+        <div className="mx-4 sm:mx-6 mt-4 rounded-lg border border-design-500/40 bg-design-500/10 px-3 py-2 text-xs text-design-100">
           Login to edit or propose changes to this spark.
         </div>
       )}
 
-      {!isReadOnly && canAddFeedback && (
-        <div className="mx-4 sm:mx-6 mt-4 rounded-lg border border-spark-500/50 bg-spark-500/10 px-3 py-2 text-xs sm:text-sm text-spark-100 flex items-center justify-between gap-3">
-          <div>
-            <p className="font-semibold">Help advance this spark with feedback.</p>
-            <p className="mt-0.5 text-[11px] sm:text-xs opacity-80">
-              Start in <span className="font-semibold">Section 5 – Feedback &amp; Critique</span> to share critiques or counter-hypotheses.
-            </p>
-          </div>
-          <button
-            onClick={() => onSparkUpdate({ ...sparkData, activeSections: [1, 5] })}
-            className="flex-shrink-0 rounded-full bg-spark-500 hover:bg-spark-400 text-black text-[11px] sm:text-xs font-semibold px-3 py-1.5 shadow-[0_0_12px_rgba(244,114,182,0.6)]"
-          >
-            Jump to Feedback
-          </button>
-        </div>
-      )}
-
-      {/* Assembly Area */}
-      {editStatus && (
-        <div
-          className={`mx-4 sm:mx-6 mt-4 rounded-lg border px-3 py-2 text-xs sm:text-sm ${editStatus.type === 'success'
-            ? 'border-logic-600/50 bg-logic-600/10 text-logic-200'
-            : 'border-red-600/50 bg-red-900/20 text-red-200'
-            }`}
-        >
-          {editStatus.message}
-        </div>
-      )}
-
-      {showPreview ? (
-        <MarkdownPreview markdown={generateSparkMarkdown(sparkData)} />
-      ) : showPRTracker ? (
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <PRTracker
-            repoUrl={repoUrl}
-            sparkFile={originalSparkData?.sourcePath || sparkData.sourcePath}
-            user={user}
-          />
-        </div>
-      ) : showCommentsPanel ? (
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <CommentsPanel
-            repoUrl={repoUrl}
-            sparkFile={originalSparkData?.sourcePath || sparkData.sourcePath}
-            user={user}
-          />
-        </div>
-      ) : (
-        <div className="flex-1 overflow-y-auto">
-          {/* ── Enhanced Two-Column Split View (Now Unified) ────────────────── */}
-          <div className="h-full flex flex-col lg:flex-row p-4 sm:p-6 gap-4 sm:gap-6">
-
-            {/* LEFT: Section 1 — always Spark Narrative */}
-            {(() => {
-              const config = ENHANCED_SECTIONS_CONFIG[1];
-              return (
-                <div className={`flex-1 flex flex-col rounded-xl border-2 border-${config.color}-600 theme-panel-soft min-w-0`}>
-                  <div className={`bg-${config.color}-600 px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl`}>
-                    <h2 className="text-lg sm:text-xl font-bold">{config.title}</h2>
-                    <p className="text-xs sm:text-sm mt-1 opacity-90">{config.description}</p>
+      {/* Main Container */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {showPreview ? (
+            <div className="flex-1 overflow-y-auto p-6 bg-black/5">
+              <MarkdownPreview markdown={generateSparkMarkdown(sparkData)} />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="h-full flex flex-col lg:flex-row gap-6">
+                {/* LEFT: Narrative */}
+                <div className="flex-1 flex flex-col rounded-xl border-2 border-spark-600 theme-panel-soft min-w-0 overflow-hidden">
+                  <div className="bg-spark-600 px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-bold">1. Spark Narrative</h2>
+                      <p className="text-xs opacity-90">The core story of the idea</p>
+                    </div>
+                    {isOwner && !isReadOnly && (
+                      <button onClick={() => openSectionEditor(1)} className="text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded font-bold">Edit</button>
+                    )}
                   </div>
-                  <div className="flex-1 p-3 sm:p-4 flex flex-col overflow-hidden">
-                    <div className="flex-1 theme-input rounded border p-3 sm:p-4 text-sm sm:text-base bg-black/10 overflow-y-auto">
-                      <div className="prose prose-invert prose-sm max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                          {sparkData.sections?.[1] || ''}
-                        </ReactMarkdown>
-                      </div>
-                    </div>
-                    <div className="mt-2">
-                      {isOwner && !isReadOnly && (
-                        <button
-                          onClick={() => openSectionEditor(1)}
-                          className={`text-xs text-${config.color}-400 hover:text-${config.color}-300`}
-                        >
-                          Edit
-                        </button>
-                      )}
-                    </div>
+                  <div className="flex-1 p-4 overflow-y-auto prose prose-invert prose-sm max-w-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                      {sparkData.sections?.[1] || '_Narrative is empty._'}
+                    </ReactMarkdown>
                   </div>
                 </div>
-              );
-            })()}
 
-            {/* RIGHT: Swappable section slot */}
-            {(() => {
-              // The second active section (if any) is the swapped section
-              const rightSectionNum = (sparkData.activeSections || [1]).find(n => n !== 1);
-              const config = rightSectionNum ? ENHANCED_SECTIONS_CONFIG[rightSectionNum] : null;
+                {/* RIGHT: Swappable Section (Defaults to Section 2) */}
+                {(() => {
+                  const rightSectionNum = (sparkData.activeSections || [1]).find(n => n !== 1) || 2;
+                  const config = ENHANCED_SECTIONS_CONFIG[rightSectionNum];
 
-              if (config) {
-                // A section is selected — render it
-                return (
-                  <div className={`flex-1 flex flex-col rounded-xl border-2 border-${config.color}-600 theme-panel-soft min-w-0`}>
-                    <div className={`bg-${config.color}-600 px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl flex items-center justify-between`}>
-                      <div>
-                        <h2 className="text-lg sm:text-xl font-bold">{config.title}</h2>
-                        <p className="text-xs sm:text-sm mt-1 opacity-90">{config.description}</p>
-                      </div>
-                      <button
-                        onClick={() => onSparkUpdate({ ...sparkData, activeSections: [1] })}
-                        className="text-white/70 hover:text-white text-xs border border-white/20 rounded px-2 py-1 ml-4"
-                      >
-                        ✕ Close
-                      </button>
-                    </div>
-                    <div className="flex-1 p-3 sm:p-4 flex flex-col overflow-hidden">
-                      <div className="flex-1 theme-input rounded border p-3 sm:p-4 text-sm sm:text-base bg-black/10 overflow-y-auto">
-                        <div className="prose prose-invert prose-sm max-w-none">
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-                            {sparkData.sections?.[rightSectionNum] || ''}
-                          </ReactMarkdown>
+                  return (
+                    <div className={`flex-1 flex flex-col rounded-xl border-2 border-${config.color}-600 theme-panel-soft min-w-0 overflow-hidden`}>
+                      <div className={`bg-${config.color}-600 px-4 py-3 flex items-center justify-between`}>
+                        <div>
+                          <h2 className="text-lg font-bold">{config.title}</h2>
+                          <p className="text-xs opacity-90">{config.description}</p>
+                        </div>
+                        <div className="flex gap-2">
+                           {isOwner && !isReadOnly && (
+                             <button 
+                               onClick={() => openSectionEditor(rightSectionNum)} 
+                               className="text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded font-bold"
+                             >
+                               Edit
+                             </button>
+                           )}
                         </div>
                       </div>
-                      <div className="mt-2">
-                        {rightSectionNum === 5 && canAddFeedback && !isReadOnly ? (
-                          <button
-                            onClick={() => setShowFeedbackModal(true)}
-                            className={`text-xs text-${config.color}-400 hover:text-${config.color}-300`}
-                          >
-                            Add feedback / critique
-                          </button>
-                        ) : (
-                          isOwner && !isReadOnly && (
-                            <button
-                              onClick={() => openSectionEditor(rightSectionNum)}
-                              className={`text-xs text-${config.color}-400 hover:text-${config.color}-300`}
-                            >
-                              Edit
-                            </button>
-                          )
-                        )}
-                        {rightSectionNum === 5 && (
-                          <FeedbackIssueLinks
-                            repoUrl={repoUrl}
-                            sparkPath={originalSparkData?.sourcePath || sparkData.sourcePath}
-                          />
-                        )}
+                      <div className="flex-1 p-4 overflow-y-auto prose prose-invert prose-sm max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                          {sparkData.sections?.[rightSectionNum] || '_Section is empty._'}
+                        </ReactMarkdown>
+                      </div>
+                      
+                      {/* Section Switcher Action Bar */}
+                      <div className="p-4 border-t theme-border bg-black/10 flex items-center justify-between">
+                         <div className="flex gap-2">
+                           {Object.entries(ENHANCED_SECTIONS_CONFIG)
+                             .filter(([n]) => parseInt(n) !== 1)
+                             .map(([n, cfg]) => (
+                               <button 
+                                 key={n} 
+                                 onClick={() => onSparkUpdate({ ...sparkData, activeSections: [1, parseInt(n)] })}
+                                 className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-wider transition-all ${
+                                   parseInt(n) === rightSectionNum 
+                                     ? `border-${cfg.color}-500 bg-${cfg.color}-600/40 text-${cfg.color}-200 shadow-lg shadow-${cfg.color}-900/20` 
+                                     : 'border-white/10 bg-white/5 text-white/40 hover:text-white/60 hover:bg-white/10'
+                                 }`}
+                               >
+                                 Section {n}: {cfg.title.split(': ').pop().split('. ').pop()}
+                               </button>
+                             ))}
+                         </div>
+                         <div className="text-[10px] theme-subtle font-bold uppercase tracking-widest hidden md:block">
+                           CORE 3 ARCHITECTURE
+                         </div>
                       </div>
                     </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+        </div>
 
-                    {/* Section picker at the bottom */}
-                    <div className="px-3 sm:px-4 pb-3 sm:pb-4">
-                      <p className="text-xs theme-subtle mb-2">Switch section:</p>
-                      <div className="flex flex-wrap gap-2">
-                        {Object.entries(ENHANCED_SECTIONS_CONFIG)
-                          .filter(([num]) => parseInt(num) !== 1)
-                          .map(([num, cfg]) => (
-                            <button
-                              key={num}
-                              onClick={() => onSparkUpdate({ ...sparkData, activeSections: [1, parseInt(num)] })}
-                              className={`text-xs px-2 py-1 rounded border transition-all ${parseInt(num) === rightSectionNum
-                                ? `border-${cfg.color}-500 bg-${cfg.color}-500/20 text-${cfg.color}-300`
-                                : 'border-white/10 hover:border-white/30 theme-muted hover:theme-text'
-                                } ${parseInt(num) === 5 && canAddFeedback ? 'animate-pulse border-spark-400 text-spark-200 bg-spark-500/10' : ''}`}
-                            >
-                              {num}. {cfg.title.split('. ')[1]}
-                            </button>
-                          ))}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
-
-              // No section selected yet — show a picker panel and news pane
-              return (
-                <div className="flex-1 flex flex-col rounded-xl border-2 border-white/10 theme-panel-soft min-w-0">
-                  <div className="px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl bg-white/5">
-                    <h2 className="text-lg sm:text-xl font-bold theme-muted">Select a Section</h2>
-                    <p className="text-xs sm:text-sm mt-1 theme-subtle">Pick a section to view alongside the Spark Narrative</p>
-                  </div>
-                  <div className="flex-1 p-4 sm:p-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {Object.entries(ENHANCED_SECTIONS_CONFIG)
-                        .filter(([num]) => parseInt(num) !== 1)
-                        .map(([num, cfg]) => (
-                          <button
-                            key={num}
-                            onClick={() => onSparkUpdate({ ...sparkData, activeSections: [1, parseInt(num)] })}
-                            className={`p-3 rounded-lg border-2 border-${cfg.color}-500/30 hover:border-${cfg.color}-500 hover:bg-${cfg.color}-500/10 transition-all text-left ${parseInt(num) === 5 && canAddFeedback ? 'animate-pulse border-spark-400 bg-spark-500/10' : ''}`}
-                          >
-                            <p className={`text-sm font-semibold text-${cfg.color}-400`}>{cfg.title}</p>
-                            <p className="text-xs theme-subtle mt-0.5">{cfg.description}</p>
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* AI Workbench Modal */}
-          {showQuiz && (
-            <AIWorkbenchModal
-              sparkData={sparkData}
-              onClose={() => setShowQuiz(false)}
-              onApplyMarkdown={handleApplySparkMarkdownFromAI}
+        {/* AI Workbench Sidebar */}
+        {showWorkbench && (
+          <div className={`flex-shrink-0 flex flex-col border-l theme-border bg-black/20 backdrop-blur-md animate-in slide-in-from-right duration-300 transition-all ${isWorkbenchExpanded ? 'w-full lg:w-[850px]' : 'w-80 lg:w-[450px]'}`}>
+            <AIWorkbenchPanel 
+              sparkData={sparkData} 
+              onClose={() => setShowWorkbench(false)} 
+              onApplyMarkdown={handleApplySparkMarkdownFromAI} 
+              isExpanded={isWorkbenchExpanded}
+              onToggleExpand={() => setIsWorkbenchExpanded(!isWorkbenchExpanded)}
             />
-          )}
+          </div>
+        )}
+      </div>
 
-          {/* Cool PR Confirmation Modal */}
-          {showConfirmation && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 theme-overlay backdrop-blur-md">
-              <div className="w-full max-w-lg overflow-hidden rounded-3xl border-2 border-logic-500 bg-black/80 shadow-[0_0_50px_-12px_rgba(34,197,94,0.5)] backdrop-blur-xl animate-in zoom-in-95 duration-200">
-                {/* Modal Header with Glow */}
-                <div className="relative h-32 w-full overflow-hidden bg-gradient-to-br from-logic-900/50 to-black p-6">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(34,197,94,0.3),_transparent_70%)]" />
-                  <div className="relative flex items-center space-x-4">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-logic-500 shadow-[0_0_20px_rgba(34,197,94,0.6)]">
-                      <GitPullRequest className="h-8 w-8 text-black" />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-black tracking-tighter text-white">SYNC SPARK</h2>
-                      <p className="text-xs font-bold uppercase tracking-widest text-logic-400">Final Validation Sequence</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-8 space-y-6">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between text-xs font-mono font-bold uppercase tracking-widest">
-                      <span className="text-white/40">Integrity Check</span>
-                      <span className="text-logic-400">PASSED</span>
-                    </div>
-                  </div>
-
-                  {/* Progress Bar Container */}
-                  <div className="relative h-2 w-full overflow-hidden rounded-full bg-white/5">
-                    <div
-                      className="h-full bg-gradient-to-r from-logic-600 to-logic-400 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(34,197,94,0.5)]"
-                      style={{ width: `${syncProgress}%` }}
-                    />
-                  </div>
-
-                  {isSubmitting ? (
-                    <div className="py-4 text-center font-mono text-sm font-bold text-logic-400 animate-pulse uppercase tracking-[0.2em]">
-                      Synchronizing with Primer...
-                    </div>
-                  ) : (
-                    <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                      <button
-                        onClick={() => setShowConfirmation(false)}
-                        className="flex-1 rounded-xl border border-white/10 bg-white/5 py-4 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-white/10"
-                      >
-                        Abort
-                      </button>
-                      <button
-                        onClick={handleSubmit}
-                        className="flex-1 rounded-xl bg-logic-500 py-4 text-sm font-black uppercase tracking-widest text-black shadow-[0_0_30px_rgba(34,197,94,0.4)] transition-all hover:bg-logic-400 hover:shadow-[0_0_40px_rgba(34,197,94,0.6)]"
-                      >
-                        Phase Shift
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-logic-900/20 p-4 text-center border-t border-logic-900/30">
-                  <p className="text-[10px] font-mono text-logic-400/60 uppercase tracking-widest">
-                    Instruction Set v2.0 &#47;&#47; Standard Gauge: 100% Correct
-                  </p>
-                </div>
-              </div>
+      {/* Global Modals */}
+      {showConfirmation && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl border-2 border-logic-500 bg-black shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="bg-gradient-to-br from-logic-900/50 to-black p-8 text-center border-b border-logic-500/20">
+              <div className="h-20 w-20 bg-logic-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-logic-500/30"><GitPullRequest className="h-10 w-10 text-black" /></div>
+              <h2 className="text-3xl font-black text-white mb-2 tracking-tight">SYNC SPARK</h2>
             </div>
-          )}
-
-          {/* Delete Confirmation Modal */}
-          {showDeleteConfirmation && (
-            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 theme-overlay backdrop-blur-md">
-              <div className="w-full max-w-lg overflow-hidden rounded-3xl border-2 border-red-500 bg-black/80 shadow-[0_0_50px_-12px_rgba(239,68,68,0.5)] backdrop-blur-xl animate-in zoom-in-95 duration-200">
-                {/* Modal Header with Glow */}
-                <div className="relative h-32 w-full overflow-hidden bg-gradient-to-br from-red-900/50 to-black p-6">
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,_rgba(239,68,68,0.3),_transparent_70%)]" />
-                  <div className="relative flex items-center space-x-4">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.6)]">
-                      <Trash2 className="h-8 w-8 text-black" />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-black tracking-tighter text-white">DELETE SPARK</h2>
-                      <p className="text-xs font-bold uppercase tracking-widest text-red-400">Permanent Request</p>
-                    </div>
-                  </div>
+            <div className="p-8 space-y-8">
+              <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-logic-500 transition-all duration-300" style={{ width: `${syncProgress}%` }} /></div>
+              {isSubmitting ? (
+                <div className="text-center py-4 font-mono text-xs text-logic-400 animate-pulse uppercase tracking-widest">Synchronizing...</div>
+              ) : (
+                <div className="flex gap-4">
+                  <button onClick={() => setShowConfirmation(false)} className="flex-1 py-4 border border-white/10 text-white font-bold rounded-2xl hover:bg-white/5 uppercase text-xs">Abort</button>
+                  <button onClick={handleSubmit} className="flex-1 py-4 bg-logic-500 text-black font-black rounded-2xl hover:bg-logic-400 uppercase text-xs shadow-lg shadow-logic-500/40">Phase Shift</button>
                 </div>
-
-                <div className="p-8 space-y-6">
-                  <div className="space-y-4 rounded-lg bg-red-500/10 border border-red-500/20 p-4">
-                    <p className="text-sm text-white/90">
-                      You are about to request the deletion of this spark:
-                    </p>
-                    <p className="text-lg font-bold text-red-400">
-                      &ldquo;{sparkData.name}&rdquo;
-                    </p>
-                    <div className="text-xs text-white/70 space-y-2 pt-2">
-                      <p>• A pull request will be created to remove this spark</p>
-                      <p>• Only you (the scout) can make this request</p>
-                      <p>• You can cancel by closing the PR without merging</p>
-                      <p>• Community review will apply to this deletion</p>
-                    </div>
-                  </div>
-
-                  {/* Progress Bar Container */}
-                  <div className="relative h-2 w-full overflow-hidden rounded-full bg-white/5">
-                    <div
-                      className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(239,68,68,0.5)]"
-                      style={{ width: `${syncProgress}%` }}
-                    />
-                  </div>
-
-                  {isSubmitting ? (
-                    <div className="py-4 text-center font-mono text-sm font-bold text-red-400 animate-pulse uppercase tracking-[0.2em]">
-                      Submitting deletion request...
-                    </div>
-                  ) : (
-                    <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                      <button
-                        onClick={() => setShowDeleteConfirmation(false)}
-                        className="flex-1 rounded-xl border border-white/10 bg-white/5 py-4 text-sm font-black uppercase tracking-widest text-white transition-all hover:bg-white/10"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleDeleteRequest}
-                        className="flex-1 rounded-xl bg-red-500 py-4 text-sm font-black uppercase tracking-widest text-black shadow-[0_0_30px_rgba(239,68,68,0.4)] transition-all hover:bg-red-400 hover:shadow-[0_0_40px_rgba(239,68,68,0.6)]"
-                      >
-                        Confirm Delete
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-red-900/20 p-4 text-center border-t border-red-900/30">
-                  <p className="text-[10px] font-mono text-red-400/60 uppercase tracking-widest">
-                    This action creates a deletion PR &#47;&#47; Community Approval Required
-                  </p>
-                </div>
-              </div>
+              )}
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {editingSection && (
-            <div className="fixed inset-0 z-50 theme-overlay backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
-              <div className="theme-panel rounded-xl border-2 border-design-600 w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] flex flex-col shadow-2xl">
-                <div className="bg-design-600 px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-base sm:text-xl font-bold truncate">Edit Section</h2>
-                    <p className="text-xs sm:text-sm opacity-90 truncate">Update the full block for this section.</p>
-                  </div>
-                  <button
-                    onClick={() => setEditingSection(null)}
-                    className="p-1.5 sm:p-2 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
-                    title="Close"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-3 sm:p-6">
-                  <textarea
-                    value={sectionDraft}
-                    onChange={(e) => setSectionDraft(e.target.value)}
-                    className="w-full h-full theme-input rounded border p-3 sm:p-4 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-design-500 font-mono resize-none min-h-[400px] sm:min-h-[500px]"
-                    autoFocus
-                  />
-                </div>
-
-                <div className="px-3 sm:px-6 py-3 sm:py-4 border-t theme-border flex justify-between items-center">
-                  <div className="text-xs sm:text-sm theme-muted">{sectionDraft.length} characters</div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => setEditingSection(null)}
-                      className="px-4 py-2 theme-button rounded-lg font-semibold transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={saveSectionEditor}
-                      className="px-4 py-2 bg-design-600 hover:bg-design-700 rounded-lg font-semibold transition-colors"
-                    >
-                      Done
-                    </button>
-                  </div>
-                </div>
+      {showDeleteConfirmation && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+           <div className="w-full max-w-md rounded-3xl border-2 border-red-500 bg-black p-8 shadow-2xl">
+              <h2 className="text-2xl font-black text-white mb-2">DELETE SPARK</h2>
+              <p className="theme-subtle mb-8 text-sm">Permanently remove via PR?</p>
+              <div className="flex gap-4">
+                 <button onClick={() => setShowDeleteConfirmation(false)} className="flex-1 py-4 border border-white/10 text-white font-bold rounded-2xl hover:bg-white/5">Cancel</button>
+                 <button onClick={handleDeleteRequest} className="flex-1 py-4 bg-red-500 text-black font-black rounded-2xl hover:bg-red-400">Confirm Delete</button>
               </div>
+           </div>
+        </div>
+      )}
+
+      {editingSection && (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="theme-panel rounded-2xl border-2 border-design-600 w-full max-w-5xl h-[85vh] flex flex-col shadow-2xl bg-black/40">
+            <div className="bg-design-600 px-6 py-4 flex items-center justify-between"><h2 className="text-xl font-bold text-white">Edit Section {editingSection}</h2><button onClick={() => setEditingSection(null)} className="text-white">✕</button></div>
+            <textarea value={sectionDraft} onChange={(e) => setSectionDraft(e.target.value)} className="flex-1 w-full bg-transparent p-8 text-white font-mono text-lg resize-none focus:outline-none" autoFocus />
+            <div className="p-6 border-t theme-border flex justify-end gap-3">
+               <button onClick={() => setEditingSection(null)} className="px-6 py-2 theme-button rounded-xl font-bold uppercase text-xs tracking-widest">Cancel</button>
+               <button onClick={saveSectionEditor} className="px-6 py-2 bg-design-600 text-white rounded-xl font-bold uppercase text-xs tracking-widest">Save Changes</button>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {/* Feedback & Critique append modal for non-owners */}
-          {showFeedbackModal && (
-            <div className="fixed inset-0 z-50 theme-overlay backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
-              <div className="theme-panel rounded-xl border-2 border-spark-600 w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl">
-                <div className="bg-spark-600 px-4 sm:px-6 py-3 sm:py-4 rounded-t-xl flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-base sm:text-xl font-bold truncate">Add Feedback &amp; Critique</h2>
-                    <p className="text-xs sm:text-sm opacity-90 truncate">Your note will be appended to the Feedback &amp; Critique section.</p>
-                  </div>
-                  <button
-                    onClick={() => setShowFeedbackModal(false)}
-                    className="p-1.5 sm:p-2 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
-                    title="Close"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-3 sm:p-6">
-                  <textarea
-                    value={feedbackDraft}
-                    onChange={(e) => setFeedbackDraft(e.target.value)}
-                    className="w-full h-full theme-input rounded border p-3 sm:p-4 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-spark-500 font-mono resize-none min-h-[260px]"
-                    placeholder="Share specific feedback, critique, or a counter-hypothesis."
-                    autoFocus
-                  />
-                </div>
-
-                <div className="px-3 sm:px-6 py-3 sm:py-4 border-t theme-border flex justify-between items-center">
-                  <div className="text-xs sm:text-sm theme-muted">{feedbackDraft.length} characters</div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => {
-                        setFeedbackDraft('');
-                        setShowFeedbackModal(false);
-                      }}
-                      className="px-4 py-2 theme-button rounded-lg font-semibold transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (!feedbackDraft.trim()) {
-                          return;
-                        }
-                        const existing = sparkData.sections?.[5] || '';
-                        const author = user?.login ? `@${user.login}` : 'Anonymous';
-                        const date = new Date().toISOString().split('T')[0];
-                        const block = `\n\n---\n\n### Feedback from ${author} (${date})\n\n${feedbackDraft.trim()}\n`;
-                        const updated = {
-                          ...sparkData,
-                          sections: {
-                            ...(sparkData.sections || {}),
-                            5: `${existing}${block}`.trimStart(),
-                          },
-                        };
-                        onSparkUpdate(updated);
-                        setFeedbackDraft('');
-                        setShowFeedbackModal(false);
-                        if (canAddFeedback) {
-                          setHighlightPropose(true);
-                        }
-                        handleEditDone();
-                      }}
-                      className="px-4 py-2 bg-spark-600 hover:bg-spark-700 rounded-lg font-semibold transition-colors"
-                    >
-                      Append Feedback
-                    </button>
-                  </div>
-                </div>
-              </div>
+      {showFeedbackModal && (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="theme-panel rounded-2xl border-2 border-spark-600 w-full max-w-2xl h-[65vh] flex flex-col shadow-2xl bg-black/40">
+            <div className="bg-spark-600 px-6 py-4 flex items-center justify-between"><h2 className="text-xl font-bold text-white">Add Feedback</h2><button onClick={() => setShowFeedbackModal(false)} className="text-white">✕</button></div>
+            <textarea value={feedbackDraft} onChange={(e) => setFeedbackDraft(e.target.value)} className="flex-1 w-full bg-transparent p-8 text-white font-mono text-lg resize-none focus:outline-none" placeholder="Add feedback..." autoFocus />
+            <div className="p-6 border-t theme-border flex justify-end gap-3">
+               <button onClick={() => { setFeedbackDraft(''); setShowFeedbackModal(false); }} className="px-6 py-2 theme-button rounded-xl font-bold uppercase text-xs">Cancel</button>
+               <button 
+                 onClick={() => {
+                   if (!feedbackDraft.trim()) return;
+                   const existing = sparkData.sections?.[5] || '';
+                   const author = user?.login ? `@${user.login}` : 'Anonymous';
+                   const block = `\n\n---\n\n### Feedback from ${author} (${new Date().toISOString().split('T')[0]})\n\n${feedbackDraft.trim()}\n`;
+                   onSparkUpdate({ ...sparkData, sections: { ...(sparkData.sections || {}), 5: `${existing}${block}`.trimStart() } });
+                   setFeedbackDraft(''); setShowFeedbackModal(false); handleEditDone();
+                 }} 
+                 className="px-6 py-2 bg-spark-600 text-white rounded-xl font-bold uppercase text-xs"
+               >
+                 Append
+               </button>
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
