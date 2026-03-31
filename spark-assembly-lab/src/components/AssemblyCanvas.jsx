@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import MarkdownPreview from './MarkdownPreview';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -17,6 +17,19 @@ const ENHANCED_SECTIONS_CONFIG = {
   3: { title: '3. Testing & Results', description: 'Experimentation outcomes and evaluation', color: 'logic' }
 };
 
+const ContributorsList = ({ contributors, loading }) => {
+  if (loading) return <div className="text-[10px] opacity-40 animate-pulse mt-1">Loading community...</div>;
+  if (!contributors || contributors.length === 0) return null;
+  return (
+    <div className="flex -space-x-2 mt-2 overflow-hidden items-center">
+      {contributors.slice(0, 5).map(c => (
+        <img key={c.login} className="inline-block h-5 w-5 rounded-full ring-2 ring-black" src={c.avatar_url} alt={c.login} title={c.login} />
+      ))}
+      {contributors.length > 5 && <span className="pl-3 text-[10px] opacity-40">+{contributors.length - 5} others</span>}
+    </div>
+  );
+};
+
 export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, originalSparkData, onResetSpark, isReadOnly, onPRCreated, canPush = true, onNewSpark, viewMode = 'components' }) {
   const [showPreview, setShowPreview] = useState(false);
   const [showWorkbench, setShowWorkbench] = useState(false);
@@ -25,6 +38,16 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
   const [isWorkbenchExpanded, setIsWorkbenchExpanded] = useState(false);
+  const [editingSection, setEditingSection] = useState(null);
+  const [sectionDraft, setSectionDraft] = useState('');
+  const [toolbarExpanded, setToolbarExpanded] = useState(true);
+  const [aiApplied, setAiApplied] = useState(false);
+  const [contributors, setContributors] = useState([]);
+  const [contributorsLoading, setContributorsLoading] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackDraft, setFeedbackDraft] = useState('');
+  const [highlightPropose] = useState(false);
+  
   const sparkDataRef = useRef(sparkData);
   const toast = useToast();
   const user = getStoredUserInfo();
@@ -46,16 +69,48 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
     sparkDataRef.current = sparkData;
   }, [sparkData]);
 
-  // Reset some UI state when the global view mode changes
+  // Reset UI state when the global view mode changes
   useEffect(() => {
     setShowPreview(false);
     setShowWorkbench(false);
   }, [viewMode]);
 
+  // Load contributors for the selected spark
+  useEffect(() => {
+    if (!sparkData?.sourcePath || !repoUrl) {
+      setContributors([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const loadContributors = async () => {
+      setContributorsLoading(true);
+      try {
+        const response = await fetch(`/api/contributors?repo=${encodeURIComponent(repoUrl)}&path=${encodeURIComponent(sparkData.sourcePath)}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error('Failed to load contributors');
+        }
+        const data = await response.json();
+        setContributors(data.contributors || []);
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.error('Failed to load contributors:', err);
+        setContributors([]);
+      } finally {
+        setContributorsLoading(false);
+      }
+    };
+
+    loadContributors();
+    return () => controller.abort();
+  }, [sparkData?.sourcePath, repoUrl]);
+
   const handleDownload = () => {
-    const validation = validateSparkData(sparkData);
-    if (!validation.valid) {
-      toast.error(`Sanctity check failed: ${validation.errors.join('; ')}`);
+    const validationResult = validateSparkData(sparkData);
+    if (!validationResult.valid) {
+      toast.error(`Sanctity check failed: ${validationResult.errors.join('; ')}`);
       return;
     }
     const md = generateSparkMarkdown(sparkData);
@@ -72,35 +127,12 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   };
 
   const handleCopyToClipboard = () => {
-    const validation = validateSparkData(sparkData);
-    if (!validation.valid) {
-      toast.error(`Sanctity check failed: ${validation.errors.join('; ')}`);
-      return;
-    }
     const md = generateSparkMarkdown(sparkData);
     navigator.clipboard.writeText(md).then(
       () => toast.success('Markdown copied to clipboard!'),
       () => toast.error('Failed to copy to clipboard')
     );
   };
-
-  const calculateCompleteness = () => {
-    const sections = sparkData.sections || {};
-    const total = 3;
-    let filled = 0;
-    for (let i = 1; i <= total; i += 1) {
-      if ((sections[i] || '').trim().length > 0) {
-        filled += 1;
-      }
-    }
-    return { filled, total };
-  };
-
-  const completeness = calculateCompleteness();
-  const validation = validateSparkData(sparkData);
-  const isDirty = originalSparkData
-    ? JSON.stringify(sparkData) !== JSON.stringify(originalSparkData)
-    : true;
 
   const formatTimeAgo = (isoString) => {
     if (!isoString) return null;
@@ -132,20 +164,29 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
     return `${yearsPart} ${monthsPart} ago`;
   };
 
+  const calculateCompleteness = () => {
+    const sections = sparkData.sections || {};
+    const total = 3;
+    let filled = 0;
+    for (let i = 1; i <= total; i += 1) {
+      if ((sections[i] || '').trim().length > 0) {
+        filled += 1;
+      }
+    }
+    return { filled, total };
+  };
+
+  const completeness = calculateCompleteness();
+  const validation = validateSparkData(sparkData);
+  const isDirty = originalSparkData
+    ? JSON.stringify(sparkData) !== JSON.stringify(originalSparkData)
+    : true;
+
   const handleEditDone = () => {
     const result = validateSparkData(sparkData);
-    if (result.valid) {
-      setEditStatus({
-        type: 'success',
-        message: 'Saved locally. Ready to submit.',
-      });
-      return;
+    if (!result.valid) {
+      toast.error(`Validation failed: ${result.errors.join('; ')}`);
     }
-
-    setEditStatus({
-      type: 'error',
-      message: `Validation failed: ${result.errors.join('; ')}`,
-    });
   };
 
   const openSectionEditor = (sectionNum) => {
@@ -253,7 +294,6 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   const handleReset = () => {
     if (!onResetSpark || !originalSparkData) return;
     onResetSpark();
-    setEditStatus({ type: 'success', message: 'Reset to original.' });
     toast.success('Reset to original.');
     setAiApplied(false);
   };
@@ -523,12 +563,12 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       {showDeleteConfirmation && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
            <div className="w-full max-w-md rounded-3xl border-2 border-red-500 bg-black p-8 shadow-2xl">
-             <h2 className="text-2xl font-black text-white mb-2">DELETE SPARK</h2>
-             <p className="theme-subtle mb-8 text-sm">Permanently remove via PR?</p>
-             <div className="flex gap-4">
-                <button onClick={() => setShowDeleteConfirmation(false)} className="flex-1 py-4 border border-white/10 text-white font-bold rounded-2xl hover:bg-white/5">Cancel</button>
-                <button onClick={handleDeleteRequest} className="flex-1 py-4 bg-red-500 text-black font-black rounded-2xl hover:bg-red-400">Confirm Delete</button>
-             </div>
+              <h2 className="text-2xl font-black text-white mb-2">DELETE SPARK</h2>
+              <p className="theme-subtle mb-8 text-sm">Permanently remove via PR?</p>
+              <div className="flex gap-4">
+                 <button onClick={() => setShowDeleteConfirmation(false)} className="flex-1 py-4 border border-white/10 text-white font-bold rounded-2xl hover:bg-white/5">Cancel</button>
+                 <button onClick={handleDeleteRequest} className="flex-1 py-4 bg-red-500 text-black font-black rounded-2xl hover:bg-red-400">Confirm Delete</button>
+              </div>
            </div>
         </div>
       )}
