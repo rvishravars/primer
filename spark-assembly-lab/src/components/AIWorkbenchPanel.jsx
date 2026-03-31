@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X, Brain, Send, Github, Info, ChevronRight, Layout, Sparkles, Maximize2, Minimize2, Trash2 } from 'lucide-react';
+import { X, Brain, Send, Info, Sparkles, Maximize2, Minimize2, Trash2 } from 'lucide-react';
 import { generateSparkMarkdown } from '../utils/sparkParser';
 import { runAgent } from '../utils/apiClient';
 import {
@@ -8,7 +8,7 @@ import {
 } from '../utils/llmConfig';
 
 export default function AIWorkbenchPanel({ sparkData, onClose, onApplyMarkdown, isExpanded, onToggleExpand }) {
-  const [{ vendor, apiKey }, setLlmConfig] = useState(() => getActiveLlmConfig());
+  const [{ vendor }, setLlmConfig] = useState(() => getActiveLlmConfig());
   const [messages, setMessages] = useState(() => [
     {
       id: 'assistant-initial',
@@ -255,7 +255,7 @@ export default function AIWorkbenchPanel({ sparkData, onClose, onApplyMarkdown, 
       {/* Diff Preview Overlays */}
       {diffTarget && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-12 theme-overlay backdrop-blur-xl animate-in fade-in duration-200">
-          <div className="w-full max-w-7xl h-full overflow-hidden rounded-3xl border-2 border-design-600/40 bg-black/95 shadow-2xl flex flex-col scale-in-center">
+          <div className="w-full max-w-7xl h-[90vh] overflow-hidden rounded-3xl border-2 border-design-600/40 bg-black/95 shadow-2xl flex flex-col scale-in-center">
             <div className="flex items-center justify-between px-6 py-4 border-b theme-border bg-gradient-to-r from-design-900/30 to-black">
               <div>
                 <h3 className="text-xl font-black text-white italic tracking-tighter">PRE-SYNCHRONIZATION DIFF</h3>

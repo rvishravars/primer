@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, ChevronLeft, ChevronRight, Plus, MessageCircle } from 'lucide-react';
+import { Download, Copy, Eye, Brain, GitPullRequest, RotateCcw, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import MarkdownPreview from './MarkdownPreview';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -7,13 +7,9 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import AIWorkbenchPanel from './AIWorkbenchPanel';
-import PRTracker from './PRTracker';
-import CommentsPanel from './CommentsPanel';
-import FeedbackIssueLinks from './FeedbackIssueLinks';
 import { generateSparkMarkdown, parseSparkFile, validateSparkData } from '../utils/sparkParser';
 import { useToast } from '../utils/ToastContext';
 import { getStoredToken, getStoredUserInfo, parseRepoUrl } from '../utils/github';
-import ContributorsList from './ContributorsList';
 
 const ENHANCED_SECTIONS_CONFIG = {
   1: { title: '1. Spark Narrative', description: 'The core story of the idea', color: 'spark' },
@@ -24,26 +20,15 @@ const ENHANCED_SECTIONS_CONFIG = {
 export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, originalSparkData, onResetSpark, isReadOnly, onPRCreated, canPush = true, onNewSpark, viewMode = 'components' }) {
   const [showPreview, setShowPreview] = useState(false);
   const [showWorkbench, setShowWorkbench] = useState(false);
-  const [showPRTracker, setShowPRTracker] = useState(false);
-  const [showCommentsPanel, setShowCommentsPanel] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
-  const [editStatus, setEditStatus] = useState(null);
-  const [editingSection, setEditingSection] = useState(null);
-  const [sectionDraft, setSectionDraft] = useState('');
-  const [toolbarExpanded, setToolbarExpanded] = useState(true);
-  const [aiApplied, setAiApplied] = useState(false);
-  const [contributors, setContributors] = useState([]);
-  const [contributorsLoading, setContributorsLoading] = useState(false);
-  const [highlightPropose, setHighlightPropose] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [feedbackDraft, setFeedbackDraft] = useState('');
   const [isWorkbenchExpanded, setIsWorkbenchExpanded] = useState(false);
   const sparkDataRef = useRef(sparkData);
   const toast = useToast();
   const user = getStoredUserInfo();
+
   const isOwner = user && (() => {
     let repoOwner = '';
     try {
@@ -56,7 +41,6 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
       user.login?.toLowerCase() === repoOwner.toLowerCase()
     );
   })();
-  const canAddFeedback = !!user && !isOwner;
 
   useEffect(() => {
     sparkDataRef.current = sparkData;
@@ -65,42 +49,8 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
   // Reset some UI state when the global view mode changes
   useEffect(() => {
     setShowPreview(false);
-    setShowPRTracker(false);
-    setShowCommentsPanel(false);
     setShowWorkbench(false);
   }, [viewMode]);
-
-  // Load contributors for the selected spark
-  useEffect(() => {
-    if (!sparkData?.sourcePath || !repoUrl) {
-      setContributors([]);
-      return;
-    }
-
-    const controller = new AbortController();
-    const loadContributors = async () => {
-      setContributorsLoading(true);
-      try {
-        const response = await fetch(`/api/contributors?repo=${encodeURIComponent(repoUrl)}&path=${encodeURIComponent(sparkData.sourcePath)}`, {
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          throw new Error('Failed to load contributors');
-        }
-        const data = await response.json();
-        setContributors(data.contributors || []);
-      } catch (err) {
-        if (err.name === 'AbortError') return;
-        console.error('Failed to load contributors:', err);
-        setContributors([]);
-      } finally {
-        setContributorsLoading(false);
-      }
-    };
-
-    loadContributors();
-    return () => controller.abort();
-  }, [sparkData?.sourcePath, repoUrl]);
 
   const handleDownload = () => {
     const validation = validateSparkData(sparkData);
@@ -452,10 +402,6 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
             <div className="flex-1 overflow-y-auto p-6 bg-black/5">
               <MarkdownPreview markdown={generateSparkMarkdown(sparkData)} />
             </div>
-          ) : showPRTracker ? (
-            <div className="flex-1 overflow-y-auto p-6 text-white"><PRTracker repoUrl={repoUrl} sparkFile={sparkData.sourcePath} user={user} /></div>
-          ) : showCommentsPanel ? (
-            <div className="flex-1 overflow-y-auto p-6 text-white"><CommentsPanel repoUrl={repoUrl} sparkFile={sparkData.sourcePath} user={user} /></div>
           ) : (
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               <div className="h-full flex flex-col lg:flex-row gap-6">
