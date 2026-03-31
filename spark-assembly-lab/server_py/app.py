@@ -28,6 +28,12 @@ try:
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 DIST_PATH = APP_ROOT / "dist"
@@ -381,26 +387,36 @@ def model_infer():
     payload = request.get_json(silent=True) or {}
     provider = payload.get("provider") or "openai"
     api_key = payload.get("apiKey") or os.environ.get("OPENAI_API_KEY")
-    model = payload.get("model") or "gpt-4o-mini"
+    
+    # Provider-aware default models
+    model = payload.get("model")
+    if not model:
+        if provider == "openai":
+            model = "gpt-4o-mini"
+        elif provider == "anthropic":
+            model = "claude-3-5-sonnet-latest"
+        elif provider == "google":
+            model = "gemini-pro-latest"
+            
     system_prompt = payload.get("system_prompt") or ""
     spark_sections = payload.get("spark_sections") or {}
     retrieved_snippets = payload.get("retrieved_snippets") or []
     conversation = payload.get("conversation") or []
     task_type = payload.get("task_type") or "generic"
 
-    if provider != "openai":
-        return jsonify({"error": "Only 'openai' provider is supported in Phase 1"}), 400
+    if provider not in ("openai", "anthropic", "google"):
+        return jsonify({"error": "Only 'openai', 'anthropic', and 'google' providers are supported"}), 400
 
     if not api_key:
-        return jsonify({"error": "OpenAI API key required"}), 400
-
-    try:
-        client = openai.OpenAI(api_key=api_key)
-    except TypeError as e:
-        return jsonify({
-            "error": "OpenAI client initialization failed. Ensure openai>=1.30.0 is installed.",
-            "details": str(e),
-        }), 500
+        if provider == "openai":
+            api_key = os.environ.get("OPENAI_API_KEY")
+        elif provider == "anthropic":
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+        elif provider == "google":
+            api_key = os.environ.get("GOOGLE_API_KEY")
+        
+        if not api_key:
+            return jsonify({"error": f"{provider.capitalize()} API key required"}), 400
 
     # Assemble a compact context payload for the model
     sections_text_parts = []
@@ -425,24 +441,58 @@ def model_infer():
       "conversation": history_lines,
     }
 
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": json.dumps(user_payload)})
-
-    # Lightweight context accounting
     token_estimate = estimate_tokens(system_prompt) + estimate_tokens(sections_text) + estimate_tokens(snippets_text)
 
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0.4,
-            max_tokens=2000,
-        )
-        content = (response.choices[0].message.content or "").strip()
-    except Exception as err:
-        return jsonify({"error": f"OpenAI API error (model.infer): {err}"}), 502
+    if provider == "openai":
+        if not OPENAI_AVAILABLE:
+            return jsonify({"error": "OpenAI SDK not installed"}), 500
+        try:
+            client = openai.OpenAI(api_key=api_key)
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": json.dumps(user_payload)})
+
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=0.4,
+                max_tokens=2000,
+            )
+            content = (response.choices[0].message.content or "").strip()
+        except Exception as err:
+            return jsonify({"error": f"OpenAI error: {err}"}), 502
+
+    elif provider == "anthropic":
+        if not ANTHROPIC_AVAILABLE:
+            return jsonify({"error": "Anthropic SDK not installed"}), 500
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model=model,
+                max_tokens=2000,
+                temperature=0.4,
+                system=system_prompt,
+                messages=[{"role": "user", "content": json.dumps(user_payload)}],
+            )
+            # Concat text blocks
+            content = "".join([b.text for b in response.content if b.type == "text"]).strip()
+        except Exception as err:
+            return jsonify({"error": f"Anthropic error: {err}"}), 502
+
+    elif provider == "google":
+        if not GEMINI_AVAILABLE:
+            return jsonify({"error": "Gemini SDK not installed"}), 500
+        try:
+            genai.configure(api_key=api_key)
+            sanitized_model = model.replace("models/", "")
+            model_instance = genai.GenerativeModel(sanitized_model)
+            
+            prompt = f"{system_prompt}\n\n{json.dumps(user_payload)}"
+            response = model_instance.generate_content(prompt)
+            content = response.text.strip()
+        except Exception as err:
+            return jsonify({"error": f"Gemini error: {err}"}), 502
 
     return jsonify({
         "output": content,
@@ -646,6 +696,97 @@ def generate_workbench_reply_with_openai(
         raise RuntimeError(f"OpenAI API error (workbench): {err}")
 
 
+def generate_workbench_reply_with_gemini(
+    spark_content: str,
+    spark_data: Dict[str, Any],
+    messages: List[Dict[str, str]],
+    api_key: str,
+    model: str = "gemini-1.5-pro",
+) -> Dict[str, str]:
+    """Generate an AI workbench reply using Google Gemini."""
+    if not GEMINI_AVAILABLE:
+        raise RuntimeError("Gemini SDK not installed")
+
+    try:
+        genai.configure(api_key=api_key)
+        # Ensure model name doesn't have an extra 'models/' prefix
+        sanitized_model = model.replace("models/", "")
+        
+        # Compress conversation for the model
+        history_lines: List[str] = []
+        for m in messages[-10:]:
+            role = (m.get("role") or "user").capitalize()
+            content = m.get("content") or ""
+            history_lines.append(f"{role}: {content}")
+
+        payload = {
+            "sparkName": spark_data.get("name"),
+            "sparkContent": spark_content[:10000],
+            "conversation": history_lines,
+        }
+
+        system_prompt = (
+            "You are an AI workbench helping iteratively improve a Spark markdown document.\n"
+            "Always respond with **only** a JSON object (no markdown fences, no extra prose) with this exact shape:\n"
+            "{\n  \"reply\": \"short conversational response to the user\",\n  "
+            "\"updatedSpark\": \"full updated spark markdown when you propose concrete edits, or an empty string when you are only discussing\"\n}\n\n"
+            "If you suggest specific edits, include the entire updated spark document in updatedSpark. "
+            "Do not include any keys other than reply and updatedSpark."
+        )
+
+        # Multi-stage retry logic using confirmed model aliases for this key
+        model_instance = None
+        last_err = None
+        
+        # 1. Try the requested model, 2. Try pro-latest, 3. Try flash-latest
+        attempts = [sanitized_model]
+        if "pro" in sanitized_model and sanitized_model != "gemini-pro-latest":
+            attempts.append("gemini-pro-latest")
+        if "flash" in sanitized_model and sanitized_model != "gemini-flash-latest":
+            attempts.append("gemini-flash-latest")
+            
+        success = False
+        for attempt in attempts:
+            try:
+                model_instance = genai.GenerativeModel(attempt)
+                response = model_instance.generate_content(f"{system_prompt}\n\n{json.dumps(payload)}")
+                success = True
+                break
+            except Exception as e:
+                last_err = e
+                # Only retry on 404 / 'not found'
+                if "404" not in str(e) and "not found" not in str(e).lower():
+                    raise e
+        
+        if not success:
+            # Final attempt: List models to provide the user with high-quality diagnostics
+            try:
+                available_models = [m.name for m in genai.list_models()]
+                diag = f"Available models for your key: {', '.join(available_models)}"
+            except Exception:
+                diag = "Failed to list available models for your API key."
+            raise RuntimeError(f"Gemini model not found after multiple attempts. {last_err}. {diag}")
+            
+        content = response.text.strip()
+        
+        # Clean up possible markdown fences
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+
+        data = json.loads(content)
+        return {
+            "reply": data.get("reply") or "",
+            "updatedSpark": data.get("updatedSpark") or ""
+        }
+    except Exception as err:
+        raise RuntimeError(f"Gemini API error (workbench): {err}")
+
+
 
 
 @app.post("/api/workbench/message")
@@ -657,28 +798,50 @@ def workbench_message():
     spark_content = payload.get("sparkContent") or ""
     spark_data = payload.get("sparkData") or {}
     messages = payload.get("messages") or []
-    model_override = payload.get("model") or "gpt-4o-mini"
-
-    if provider != "openai":
-        return jsonify({"error": "provider must be 'openai'"}), 400
+    
+    # Provider-aware default models
+    model_override = payload.get("model")
+    if not model_override:
+        if provider == "openai":
+            model_override = "gpt-4o-mini"
+        elif provider == "anthropic":
+            model_override = "claude-3-5-sonnet-latest"
+        elif provider == "google":
+            model_override = "gemini-1.5-pro"
+            
+    if provider not in ("openai", "google"):
+        return jsonify({"error": "provider must be 'openai' or 'google'"}), 400
     if not spark_content:
         return jsonify({"error": "sparkContent is required"}), 400
     if not isinstance(messages, list) or not messages:
         return jsonify({"error": "messages array with at least one item is required"}), 400
 
     if not api_key:
-        api_key = os.environ.get("OPENAI_API_KEY")
+        if provider == "openai":
+            api_key = os.environ.get("OPENAI_API_KEY")
+        elif provider == "google":
+            api_key = os.environ.get("GOOGLE_API_KEY")
+            
         if not api_key:
-            return jsonify({"error": "OpenAI API key required. Please enter your API key in the AI Workbench."}), 400
+            return jsonify({"error": f"{provider.capitalize()} API key required. Please enter it in the AI Workbench settings."}), 400
 
     try:
-        result = generate_workbench_reply_with_openai(
-            spark_content,
-            spark_data,
-            messages,
-            api_key,
-            model=model_override,
-        )
+        if provider == "openai":
+            result = generate_workbench_reply_with_openai(
+                spark_content,
+                spark_data,
+                messages,
+                api_key,
+                model=model_override,
+            )
+        elif provider == "google":
+            result = generate_workbench_reply_with_gemini(
+                spark_content,
+                spark_data,
+                messages,
+                api_key,
+                model=model_override,
+            )
         return jsonify(result)
     except RuntimeError as err:
         return jsonify({"error": str(err)}), 502
@@ -1006,10 +1169,19 @@ def run_agent():
     spark_content = payload.get("sparkContent") or ""
     spark_data = payload.get("sparkData") or {}
     messages = payload.get("messages") or []
-    model_override = payload.get("model") or "gpt-4o-mini"
+    
+    # Provider-aware default models
+    model_override = payload.get("model")
+    if not model_override:
+        if provider == "openai":
+            model_override = "gpt-4o-mini"
+        elif provider == "anthropic":
+            model_override = "claude-3-5-sonnet-latest"
+        elif provider == "google":
+            model_override = "gemini-pro-latest"
 
-    if provider not in ("openai", "anthropic"):
-        return jsonify({"error": "Only 'openai' and 'anthropic' providers are supported for agents in this phase"}), 400
+    if provider not in ("openai", "anthropic", "google"):
+        return jsonify({"error": "Only 'openai', 'anthropic', and 'google' providers are supported for agents in this phase"}), 400
     if not spark_content:
         return jsonify({"error": "sparkContent is required"}), 400
     if not isinstance(messages, list) or not messages:
@@ -1020,29 +1192,31 @@ def run_agent():
             api_key = os.environ.get("OPENAI_API_KEY")
         elif provider == "anthropic":
             api_key = os.environ.get("ANTHROPIC_API_KEY")
+        elif provider == "google":
+            api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             return jsonify({"error": f"{provider.capitalize()} API key required. Please enter your API key in the LLM Login."}), 400
 
     agent_definitions = {
         "improve_spark_maturity": {
-            "description": "Audit and improve the spark's overall maturity and coherence across sections.",
+            "description": "Audit and improve the spark's overall maturity and coherence across core sections.",
         },
         "design_experiment_from_spark": {
-            "description": "Design or refine experiments and simulations based on this spark.",
+            "description": "Design or refine experiments and simulations based on the hypothesis.",
         },
         "summarize_results_for_review": {
-            "description": "Summarize current results and prepare the spark for human review.",
+            "description": "Summarize current test results and prepare for human review.",
         },
     }
 
     if task_type not in agent_definitions:
         return jsonify({"error": f"Unsupported task_type '{task_type}' for Phase 2 agents"}), 400
 
-    # Minimal RAG-style technical sections stub
+    # Pure Markdown 3-section stubs
     name = (spark_data or {}).get("name") or "Unnamed Spark"
     technical_sections = {
-        "3": f"Automated notes for simulation/modeling plan when running task '{task_type}' on spark '{name}'.",
-        "4": f"Automated notes for evaluation strategy for spark '{name}'.",
+        "2": f"Logical formalization of spark '{name}'.",
+        "3": f"Automated results or modeling findings for spark '{name}'.",
     }
 
     # Log basic trace info for this agent run.
@@ -1068,14 +1242,15 @@ def run_agent():
                 "error": "OpenAI client initialization failed. Ensure openai>=1.30.0 is installed.",
                 "details": str(e),
             }), 500
-    elif provider == "anthropic":
-        if not ANTHROPIC_AVAILABLE:
-            return jsonify({"error": "Anthropic SDK not installed"}), 500
+    elif provider == "google":
+        if not GEMINI_AVAILABLE:
+            return jsonify({"error": "Gemini SDK not installed"}), 500
         try:
-            anthropic_client = anthropic.Anthropic(api_key=api_key)
-        except Exception as e:  # noqa: BLE001
+            # We don't need a persistent client for Gemini yet as we use the helper
+            pass
+        except Exception as e:
             return jsonify({
-                "error": "Anthropic client initialization failed.",
+                "error": "Gemini initialization failed.",
                 "details": str(e),
             }), 500
 
@@ -1096,7 +1271,14 @@ def run_agent():
         "{\n  \"reply\": \"short conversational response to the user\",\n  "
         "\"updatedSpark\": \"full updated spark markdown when you propose concrete edits, or an empty string when you are only discussing\"\n}\n\n"
         "If you suggest specific edits, include the entire updated spark document in updatedSpark. "
-        "Do not include any keys other than reply and updatedSpark."
+        "Do not include any keys other than reply and updatedSpark.\n\n"
+        "STRICly adhere to the v3.0 Pure Markdown Standard:\n"
+        "- NO YAML frontmatter (no --- blocks).\n"
+        "- Name is derived from the first # H1 heading.\n"
+        "- Use exactly three core sections:\n"
+        "  # 1. Spark Narrative\n"
+        "  # 2. Hypothesis Formalization\n"
+        "  # 3. Testing & Results\n"
     )
 
     user_payload = {
@@ -1123,7 +1305,7 @@ def run_agent():
                 max_tokens=2000,
             )
             content = response.choices[0].message.content or ""
-        else:
+        elif provider == "anthropic":
             response = anthropic_client.messages.create(
                 model=model_override,
                 max_tokens=2000,
@@ -1139,6 +1321,25 @@ def run_agent():
                 elif isinstance(block, dict) and block.get("type") == "text":
                     content_parts.append(block.get("text", ""))
             content = "".join(content_parts).strip()
+        elif provider == "google":
+            res = generate_workbench_reply_with_gemini(
+                spark_content,
+                spark_data,
+                messages,
+                api_key,
+                model=model_override,
+            )
+            return jsonify({
+                "reply": res.get("reply") or "",
+                "updatedSpark": res.get("updatedSpark") or "",
+                "agent": {
+                    "task_type": task_type,
+                    "technical_sections": technical_sections,
+                },
+                "context": {
+                    "estimated_tokens": token_estimate,
+                },
+            })
 
         cleaned = content.strip()
         if cleaned.startswith("```json"):

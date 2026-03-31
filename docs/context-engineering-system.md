@@ -76,7 +76,7 @@ Key ideas:
 - A **Context Assembly / RAG Service** is responsible for building and updating *Spark* documents:
   - Pulls from tools (code search, logs, APIs, documents).
   - Uses embeddings and heuristics to find relevant materials.
-  - Writes them into a structured spark schema (narrative, hypotheses, constraints, evaluation plan, etc.).
+  - Writes them into a structured spark schema (Narrative, Hypothesis, Testing).
 - RAG here is not just "retrieve and paste"; it **curates** content into a reusable, human‑readable spark.
 
 ### 2.4 Tools (MCP)
@@ -109,7 +109,7 @@ Key ideas:
   - Constraints (e.g., safety, style, length).
 - Templates are **versioned and parameterized**:
   - Slots for spark metadata (title, domain, maturity).
-  - Slots for sections (narrative, hypothesis, constraints).
+  - Slots for sections (Narrative, Hypothesis, Testing).
   - Slots for task‑specific instructions (e.g., "focus on API changes").
 
 ---
@@ -145,7 +145,7 @@ Key ideas:
   - Retrieves additional relevant artifacts (via embeddings or indices).
   - Summarizes and normalizes them.
   - Writes or updates **Spark documents** with structured sections.
-- RAG output is typically stored in one or more **technical sections inside the spark** (for example, "Retrieved Context", "Evidence Summary", or "Source Index").
+- RAG output is typically stored in one or more **technical sections inside the spark** (for example, "Testing & Results" or "Community Proposals").
   - These sections are primarily maintained by agents and pipelines.
   - Humans can still read, annotate, or override them when needed.
 - Can maintain:
@@ -156,14 +156,11 @@ Key ideas:
 
 - Long‑lived, human‑readable context artifacts.
 - Typically include:
-  - Narrative / problem description.
-  - Hypothesis formalization.
-  - Modeling or experimentation plan.
-  - Constraints, assumptions, metrics.
-  - Results, revision notes, community proposals.
-  - One or more **agent‑managed technical sections** that hold the outputs of RAG (retrieved snippets, evidence summaries, indices).
+  - Spark Narrative.
+  - Hypothesis Formalization.
+  - Testing & Results.
 - Designed to be:
-  - **Readable by humans** (markdown/YAML).
+  - **Readable by humans** (Pure Markdown).
   - **Consumable by models** (as structured context).
   - In this implementation, stored canonically as versioned files in GitHub repositories; no separate database is used as the source of truth for sparks.
 
@@ -292,7 +289,7 @@ This keeps the spark as the single context artifact, with feedback and proposals
 
 In the spark-assembly-lab project, you can see concrete examples of these concepts:
 
-- Spark documents and templates (YAML + markdown).
+- Spark documents using the Pure Markdown 3-section core.
 - An "AI Workbench" that takes a spark and uses the configured LLM (Codex or Claude Code) to propose updates.
 - A UI and workflow that let humans inspect and apply AI‑generated spark revisions.
 

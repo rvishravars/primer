@@ -5,87 +5,30 @@
 export function parseSparkFile(content) {
   console.log('🔍 Parsing spark file, content length:', content.length);
 
-  let enhancedContributors = { scout: '' };
-  const frontmatter = {};
-
-  // Extract spark name - support multiple formats
   let name = 'Untitled Spark';
   let markedForDeletion = false;
 
-  // Try YAML frontmatter first
-  const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
-  if (frontmatterMatch) {
-    const yaml = frontmatterMatch[1];
-    // Very lightweight YAML extraction for common scalar fields used in the
-    // enhanced spark schema. This avoids adding a full YAML parser while still
-    // exposing key metadata to the UI.
-    const extractScalar = (key) => {
-      const m = yaml.match(new RegExp(`^${key}:\\s*(.+)$`, 'mi'));
-      if (!m) return undefined;
-      return m[1].trim().replace(/^['"]|['"]$/g, '');
-    };
+  // Extract spark name from the first H1 heading
+  // Skip enhanced template section headings like '# 1. Spark Narrative'
+  const lines = content.split('\n');
+  for (let line of lines) {
+    line = line.trim();
+    if (line.startsWith('#') && !/^#\s*\d+\./.test(line)) {
+      // Extract the title part after #
+      const rawTitle = line.replace(/^#\s*/, '').trim();
+      if (!rawTitle) continue;
 
-    const scalarKeys = [
-      'id',
-      'title',
-      'domain',
-      'spark_type',
-      'maturity_level',
-      'status',
-      'core_claim',
-      'problem_statement',
-    ];
-    scalarKeys.forEach((key) => {
-      const value = extractScalar(key);
-      if (value !== undefined) {
-        frontmatter[key] = value;
-      }
-    });
+      // Strip optional emoji and brand prefixes (Spark, Template)
+      const cleanTitle = rawTitle.replace(/^(?:[^\w\s\u{1F300}-\u{1F9FF}]|\s)*(?:Spark|Template|The)\s*[:\s]\s*/iu, '').trim();
 
-    // Extract simple owner mapping from the ownership block when present.
-    const scoutMatch = yaml.match(/^owners:\s*[\r\n]+\s*scout:\s*(.+)$/mi);
-    if (scoutMatch) {
-      enhancedContributors.scout = scoutMatch[1].trim().replace(/^['"]|['"]$/g, '');
-    }
-
-    const repoPathMatch = yaml.match(/^repo:\s*[\r\n]+\s*path:\s*(.+)$/mi);
-    if (repoPathMatch) {
-      frontmatter.repoPath = repoPathMatch[1].trim().replace(/^['"]|['"]$/g, '');
-    }
-    // Try `name:` first, then `title:` (used by enhanced sparks)
-    const nameFieldMatch = yaml.match(/^name:\s*(.+)$/m);
-    const titleFieldMatch = yaml.match(/^title:\s*(.+)$/m);
-    if (nameFieldMatch) {
-      name = nameFieldMatch[1].trim().replace(/^["']|["']$/g, '');
-    } else if (titleFieldMatch) {
-      name = titleFieldMatch[1].trim().replace(/^["']|["']$/g, '');
-    }
-    // Check for deletion flag
-    const deletionFlagMatch = yaml.match(/^marked_for_deletion:\s*(true|yes)$/mi);
-    if (deletionFlagMatch) {
-      markedForDeletion = true;
+      name = cleanTitle || rawTitle;
+      break;
     }
   }
 
-  // If no name found in frontmatter, fall back to the first H1 heading
-  // but skip enhanced template section headings like '# 1. Spark Narrative'
-  if (name === 'Untitled Spark') {
-    const lines = content.split('\n');
-    for (let line of lines) {
-      line = line.trim();
-      if (line.startsWith('#') && !/^#\s*\d+\./.test(line)) {
-        // Extract the title part after #
-        const rawTitle = line.replace(/^#\s*/, '').trim();
-        if (!rawTitle) continue;
-
-        // Strip optional emoji and brand prefixes (Spark, Template)
-        // This regex handles: 🧩 Spark: My Name, Spark: My Name, # My Name, etc.
-        const cleanTitle = rawTitle.replace(/^(?:[^\w\s\u{1F300}-\u{1F9FF}]|\s)*(?:Spark|Template|The)\s*[:\s]\s*/iu, '').trim();
-
-        name = cleanTitle || rawTitle;
-        break;
-      }
-    }
+  // Check for deletion marker (legacy or inline)
+  if (content.includes('marked_for_deletion: true')) {
+    markedForDeletion = true;
   }
 
   console.log('📝 Spark name:', name);
@@ -96,11 +39,10 @@ export function parseSparkFile(content) {
   const result = {
     name,
     markedForDeletion,
-    frontmatter,
-    isEnhanced: true, // All sprouts are now considered enhanced
+    isEnhanced: true,
     sections: extractGranularSections(content || ''),
     contributors: {
-      scout: enhancedContributors.scout || '',
+      scout: '', // Derived from Git elsewhere
     },
     stability,
     proposals: parseProposals(content),
@@ -112,45 +54,47 @@ export function parseSparkFile(content) {
 const ENHANCED_SECTION_HEADERS = [
   '# 1. Spark Narrative',
   '# 2. Hypothesis Formalization',
-  '# 3. Simulation / Modeling Plan',
-  '# 4. Evaluation Strategy',
-  '# 5. Feedback & Critique',
-  '# 6. Results (When Available)',
-  '# 7. Revision Notes',
-  '# 8. Next Actions'
+  '# 3. Testing & Results'
 ];
 
 function extractGranularSections(content) {
   const sections = {};
-  ENHANCED_SECTION_HEADERS.forEach((header, index) => {
-    const nextHeader = ENHANCED_SECTION_HEADERS[index + 1];
-    const escapedHeader = header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedNextHeader = nextHeader ? nextHeader.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '$';
-    const regex = new RegExp(`${escapedHeader}\\s*\\n?([\\s\\S]*?)(?=\\n---?\\n|\\n${escapedNextHeader}|${escapedNextHeader}|$)`, 'i');
+  const SECTION_MAPPINGS = [
+    { target: 1, regexHead: '# (?:(?:1|10)\\.\\s*)?Spark Narrative' },
+    { target: 2, regexHead: '# (?:(?:2|20)\\.\\s*)?Hypothesis Formalization' },
+    { target: 3, regexHead: '# (?:(?:3|30|40|50|60)\\.\\s*)?Testing & Results' },
+    { target: 9, regexHead: '# (?:(?:9)\\.\\s*)?Community Proposals' }
+  ];
+
+  SECTION_MAPPINGS.forEach((mapping) => {
+    const nextMappings = SECTION_MAPPINGS.slice(SECTION_MAPPINGS.indexOf(mapping) + 1);
+    const nextRegexHead = nextMappings.length > 0 
+      ? nextMappings.map(m => m.regexHead).join('|')
+      : '$';
+    
+    // Create a regex that starts with the current mapping's header and looks ahead for the next mapping's header or a separator
+    const regex = new RegExp(`${mapping.regexHead}\\s*\\n?([\\s\\S]*?)(?=\\n---?\\n|\\n(?:${nextRegexHead})|$)`, 'i');
+    
     const match = content.match(regex);
     if (match) {
-      sections[index + 1] = match[1].trim();
+      sections[mapping.target] = match[1].trim();
     }
   });
+
   return sections;
 }
 
 
 function parseProposals(content) {
-  const proposals = { 1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '', 8: '' };
-  const sectionMatch = content.match(/# 9\. Community Proposals\s*\n([\s\S]*?)(?=\n---\n# Maturity Guide|$)/);
+  const proposals = { 1: '', 2: '', 3: '' };
+  const sectionMatch = content.match(/# (?:9\.\s*)?Community Proposals\s*\n([\s\S]*?)(?=\n---\n# Maturity Guide|$)/i);
   if (!sectionMatch) return proposals;
 
   const section = sectionMatch[1];
   const sectionRegex = {
     1: /## Proposed Changes to Section 1 \(Spark Narrative\)\s*\n([\s\S]*?)(?=\n---\n## Proposed Changes to Section 2|$)/,
     2: /## Proposed Changes to Section 2 \(Hypothesis Formalization\)\s*\n([\s\S]*?)(?=\n---\n## Proposed Changes to Section 3|$)/,
-    3: /## Proposed Changes to Section 3 \(Simulation \/ Modeling Plan\)\s*\n([\s\S]*?)(?=\n---\n## Proposed Changes to Section 4|$)/,
-    4: /## Proposed Changes to Section 4 \(Evaluation Strategy\)\s*\n([\s\S]*?)(?=\n---\n## Proposed Changes to Section 5|$)/,
-    5: /## Proposed Changes to Section 5 \(Feedback & Critique\)\s*\n([\s\S]*?)(?=\n---\n## Proposed Changes to Section 6|$)/,
-    6: /## Proposed Changes to Section 6 \(Results\)\s*\n([\s\S]*?)(?=\n---\n## Proposed Changes to Section 7|$)/,
-    7: /## Proposed Changes to Section 7 \(Revision Notes\)\s*\n([\s\S]*?)(?=\n---\n## Proposed Changes to Section 8|$)/,
-    8: /## Proposed Changes to Section 8 \(Next Actions\)\s*\n([\s\S]*?)(?=\n---\n> \*\*Proposal Tracking\*\*:|$)/,
+    3: /## Proposed Changes to Section 3 \(Testing & Results\)\s*\n([\s\S]*?)(?=\n---\n> \*\*Proposal Tracking\*\*:|$)/,
   };
 
   Object.entries(sectionRegex).forEach(([key, regex]) => {
@@ -200,17 +144,12 @@ export function generateSparkMarkdown(sparkData) {
   const { name, markedForDeletion = false } = sparkData;
   let markdown = '';
 
-  // Add YAML frontmatter with deletion flag
   if (markedForDeletion) {
-    markdown += `---\ntitle: "${name}"\nstatus: deletion_pending\nmarked_for_deletion: true\n---\n\n`;
     markdown += `> ⚠️ **This spark is marked for deletion.** A pull request to remove this spark has been submitted. To cancel the deletion, close the associated pull request without merging.\n\n`;
-  } else if (sparkData.rawContent && sparkData.rawContent.includes('spark_type:')) {
-    // If we have raw content (e.g. from template), preserve it but update title
-    markdown = sparkData.rawContent.replace(/^title:\s*".*?"/m, `title: "${name}"`);
-    return markdown;
+    markdown += `marked_for_deletion: true\n\n`;
   }
 
-  markdown = `# ${name}\n\n`;
+  markdown += `# ${name}\n\n`;
 
   const sections = sparkData.sections || {};
   ENHANCED_SECTION_HEADERS.forEach((header, index) => {
@@ -225,18 +164,13 @@ export function generateSparkMarkdown(sparkData) {
   const sectionNames = {
     1: 'Spark Narrative',
     2: 'Hypothesis Formalization',
-    3: 'Simulation / Modeling Plan',
-    4: 'Evaluation Strategy',
-    5: 'Feedback & Critique',
-    6: 'Results',
-    7: 'Revision Notes',
-    8: 'Next Actions'
+    3: 'Testing & Results'
   };
 
   const hasProposals = Object.keys(proposals).some(k => proposals[k]);
   if (hasProposals) {
     markdown += `# 9. Community Proposals\n\n`;
-    for (let i = 1; i <= 8; i++) {
+    for (let i = 1; i <= 3; i++) {
       if (proposals[i]) {
         markdown += `## Proposed Changes to Section ${i} (${sectionNames[i]})\n`;
         markdown += `${proposals[i].trim()}\n\n`;
