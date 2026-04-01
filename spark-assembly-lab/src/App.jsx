@@ -237,6 +237,7 @@ function AppMain() {
         <main className="flex-1 overflow-y-auto w-full">
           {sparkData && sparkData.name ? (
             <AssemblyCanvas
+              theme={theme}
               sparkData={sparkData}
               onSparkUpdate={handleSparkUpdate}
               repoUrl={repoUrl}
