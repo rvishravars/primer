@@ -7,6 +7,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import AIWorkbenchPanel from './AIWorkbenchPanel';
+import Mermaid from './Mermaid';
 import { generateSparkMarkdown, parseSparkFile, validateSparkData } from '../utils/sparkParser';
 import { useToast } from '../utils/ToastContext';
 import { getStoredToken, getStoredUserInfo, parseRepoUrl } from '../utils/github';
@@ -30,7 +31,7 @@ const ContributorsList = ({ contributors, loading }) => {
   );
 };
 
-export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, originalSparkData, onResetSpark, isReadOnly, onPRCreated, canPush = true, onNewSpark, viewMode = 'components' }) {
+export default function AssemblyCanvas({ theme, sparkData, onSparkUpdate, repoUrl, originalSparkData, onResetSpark, isReadOnly, onPRCreated, canPush = true, onNewSpark, viewMode = 'components' }) {
   const [showPreview, setShowPreview] = useState(false);
   const [showWorkbench, setShowWorkbench] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -349,6 +350,22 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
     }
   };
 
+  const components = {
+    code({ inline, className, children, ...props }) {
+      const match = /language-(\w+)/.exec(className || '');
+      const chartCode = String(children).replace(/\n$/, '');
+
+      if (!inline && match && match[1] === 'mermaid') {
+        return <Mermaid chart={chartCode} theme={theme} />;
+      }
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      );
+    },
+  };
+
   return (
     <div className="h-full flex flex-col overflow-hidden theme-surface">
       {/* Toolbar */}
@@ -440,7 +457,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {showPreview ? (
             <div className="flex-1 overflow-y-auto p-6 bg-black/5">
-              <MarkdownPreview markdown={generateSparkMarkdown(sparkData)} />
+              <MarkdownPreview markdown={generateSparkMarkdown(sparkData)} theme={theme} />
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
@@ -457,7 +474,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                     )}
                   </div>
                   <div className="flex-1 p-4 overflow-y-auto prose prose-invert prose-sm max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={components}>
                       {sparkData.sections?.[1] || '_Narrative is empty._'}
                     </ReactMarkdown>
                   </div>
@@ -487,7 +504,7 @@ export default function AssemblyCanvas({ sparkData, onSparkUpdate, repoUrl, orig
                         </div>
                       </div>
                       <div className="flex-1 p-4 overflow-y-auto prose prose-invert prose-sm max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={components}>
                           {sparkData.sections?.[rightSectionNum] || '_Section is empty._'}
                         </ReactMarkdown>
                       </div>
